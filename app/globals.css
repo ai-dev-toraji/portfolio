@@ -1,0 +1,24 @@
+@import "tailwindcss";
+
+@theme inline {
+  --color-primary: #0048A0;
+  --color-sub: #E9EEF5;
+  --color-accent: #FDD72C;
+  --color-background: #E9EEF5;
+  --color-foreground: #1a1a1a;
+  --font-serif: var(--font-noto-serif-jp), "Noto Serif JP", Georgia, serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background: var(--color-sub);
+  color: var(--color-foreground);
+  font-family: var(--font-noto-serif-jp), "Noto Serif JP", Georgia, serif;
+}
