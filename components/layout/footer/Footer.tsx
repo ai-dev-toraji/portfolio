@@ -25,11 +25,9 @@ export default function Footer() {
           ))}
         </nav>
 
-        {/* Site Name */}
         <Link href="/">
           <Image src="/logo-white.svg" alt="NEXTORA" width={200} height={50} />
         </Link>
-        {/* Copyright */}
         <p className="text-white text-[10px] tracking-widest">
           &copy; {new Date().getFullYear()} NEXTORA. All rights reserved.
         </p>
