@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 
 const navItems = [
   { label: "About", href: "#about" },
@@ -9,7 +10,7 @@ const navItems = [
 
 export default function Footer() {
   return (
-    <footer className="bg-[#0048A0] py-12">
+    <footer className="bg-(--color-primary) py-12">
       <div className="max-w-6xl mx-auto px-6 flex flex-col items-center gap-8">
         {/* Footer Nav */}
         <nav className="flex flex-wrap justify-center gap-8">
@@ -17,7 +18,7 @@ export default function Footer() {
             <Link
               key={item.label}
               href={item.href}
-              className="text-xs text-[#E9EEF5]/60 tracking-widest hover:text-[#FDD72C] transition-colors duration-200"
+              className="text-xs text-white tracking-widest hover:text-(--color-accent) transition-colors duration-200"
             >
               {item.label}
             </Link>
@@ -25,13 +26,12 @@ export default function Footer() {
         </nav>
 
         {/* Site Name */}
-        <p className="text-[#E9EEF5] text-xs tracking-[0.5em] uppercase">
-          MORI CORDER
-        </p>
-
+        <Link href="/">
+          <Image src="/logo-white.svg" alt="NEXTORA" width={200} height={50} />
+        </Link>
         {/* Copyright */}
-        <p className="text-[#E9EEF5]/30 text-[10px] tracking-widest">
-          &copy; {new Date().getFullYear()} MORI CORDER. All rights reserved.
+        <p className="text-white text-[10px] tracking-widest">
+          &copy; {new Date().getFullYear()} NEXTORA. All rights reserved.
         </p>
       </div>
     </footer>

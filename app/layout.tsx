@@ -10,8 +10,8 @@ const notoSerifJP = Noto_Serif_JP({
 });
 
 export const metadata: Metadata = {
-  title: "MORI CORDER | Portfolio",
-  description: "フロントエンドエンジニアのポートフォリオサイトです。",
+  title: "NEXTORA | Portfolio",
+  description: "ポートフォリオサイトです。",
 };
 
 export default function RootLayout({

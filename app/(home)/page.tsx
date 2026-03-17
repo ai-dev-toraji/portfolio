@@ -1,8 +1,8 @@
-import Header from "./components/Header";
+import Header from "@/components/layout/header";
+import Footer from "@/components/layout/footer";
 import Hero from "./components/Hero";
 import Works from "./components/Works";
 import Service from "./components/Service";
-import Footer from "./components/Footer";
 
 export default function Home() {
   return (
