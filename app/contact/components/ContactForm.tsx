@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import SectionTitle from "@/components/ui/section-title";
 
 type Status = "idle" | "loading" | "success" | "error";
@@ -11,6 +12,7 @@ export default function ContactForm() {
     email: "",
     phone: "",
     message: "",
+    website: "", // ハニーポット（ボット検知用・非表示）
   });
   const [status, setStatus] = useState<Status>("idle");
   const [errorMessage, setErrorMessage] = useState("");
@@ -34,7 +36,7 @@ export default function ContactForm() {
       }
 
       setStatus("success");
-      setFormData({ name: "", email: "", phone: "", message: "" });
+      setFormData({ name: "", email: "", phone: "", message: "", website: "" });
     } catch (err) {
       setStatus("error");
       setErrorMessage(err instanceof Error ? err.message : "送信に失敗しました。");
@@ -61,14 +63,35 @@ export default function ContactForm() {
             <p className="text-(--color-primary) text-lg font-bold tracking-wide mb-4">
               送信が完了しました
             </p>
-            <p className="text-(--color-text)/70 text-sm leading-loose">
+            <p className="text-(--color-text)/70 text-sm leading-loose mb-10">
               お問い合わせいただきありがとうございます。
               <br />
               内容を確認のうえ、折り返しご連絡いたします。
             </p>
+            <Link
+              href="/"
+              className="inline-flex items-center gap-4 text-sm tracking-[0.3em] px-10 py-4 bg-(--color-primary) text-white border border-(--color-primary) hover:bg-white hover:text-(--color-primary) transition-all duration-300 group"
+            >
+              <span className="inline-block transition-transform duration-300 group-hover:-translate-x-2">
+                &#8592;
+              </span>
+              トップへ戻る
+            </Link>
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="max-w-3xl mx-auto">
+            {/* ハニーポット：人間には見えない、ボットが入力するとサーバー側で拒否 */}
+            <div aria-hidden="true" className="hidden">
+              <input
+                type="text"
+                name="website"
+                value={formData.website}
+                onChange={(e) => setFormData({ ...formData, website: e.target.value })}
+                tabIndex={-1}
+                autoComplete="off"
+              />
+            </div>
+
             {/* お名前 */}
             <div className={rowClass}>
               <label className={labelClass}>

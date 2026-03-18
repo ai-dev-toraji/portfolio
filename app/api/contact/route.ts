@@ -1,12 +1,83 @@
 import { NextRequest, NextResponse } from "next/server";
 import nodemailer from "nodemailer";
 
-export async function POST(req: NextRequest) {
-  const { name, email, phone, message } = await req.json();
+// ── レート制限（インメモリ） ──────────────────────────
+const RATE_LIMIT_WINDOW_MS = 10 * 60 * 1000; // 10分
+const RATE_LIMIT_MAX = 3; // 10分間に最大3回
 
+const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
+
+function isRateLimited(ip: string): boolean {
+  const now = Date.now();
+  const entry = rateLimitMap.get(ip);
+
+  if (!entry || now > entry.resetAt) {
+    rateLimitMap.set(ip, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS });
+    return false;
+  }
+
+  if (entry.count >= RATE_LIMIT_MAX) return true;
+
+  entry.count++;
+  return false;
+}
+
+// ── 入力サイズ制限 ────────────────────────────────────
+const LIMITS = {
+  name: 100,
+  email: 254,
+  phone: 20,
+  message: 2000,
+};
+
+// ── API ───────────────────────────────────────────────
+export async function POST(req: NextRequest) {
+  // IP 取得
+  const ip =
+    req.headers.get("x-forwarded-for")?.split(",")[0].trim() ?? "unknown";
+
+  // レート制限チェック
+  if (isRateLimited(ip)) {
+    return NextResponse.json(
+      { error: "送信回数の上限に達しました。しばらく時間をおいてから再度お試しください。" },
+      { status: 429 }
+    );
+  }
+
+  const body = await req.json();
+  const { name, email, phone, message, website } = body;
+
+  // ハニーポットチェック（ボットは hidden フィールドに値を入れる）
+  if (website) {
+    return NextResponse.json({ success: true }); // ボットには成功を偽装
+  }
+
+  // 必須チェック
   if (!name || !email || !message) {
     return NextResponse.json(
       { error: "お名前・メールアドレス・お問い合わせ内容は必須です。" },
+      { status: 400 }
+    );
+  }
+
+  // サイズ制限チェック
+  if (
+    name.length > LIMITS.name ||
+    email.length > LIMITS.email ||
+    (phone && phone.length > LIMITS.phone) ||
+    message.length > LIMITS.message
+  ) {
+    return NextResponse.json(
+      { error: "入力内容が長すぎます。" },
+      { status: 400 }
+    );
+  }
+
+  // メールアドレス簡易検証
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(email)) {
+    return NextResponse.json(
+      { error: "メールアドレスの形式が正しくありません。" },
       { status: 400 }
     );
   }
