@@ -22,7 +22,7 @@ export default function ServiceList() {
   return (
     <section className="bg-(--color-sub) py-20 md:py-28">
       <div className="max-w-5xl mx-auto px-6">
-        <SectionTitle color="primary">SERVICE</SectionTitle>
+        <SectionTitle color="primary" as="h1">SERVICE</SectionTitle>
         <div className="flex flex-col gap-16">
           {services.map((service) => (
             <div

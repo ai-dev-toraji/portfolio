@@ -1,7 +1,10 @@
+import SectionTitle from "@/components/ui/section-title";
+
 export default function Profile() {
   return (
     <section className="bg-(--color-sub) py-20 md:py-28">
       <div className="max-w-5xl mx-auto px-6">
+        <SectionTitle color="primary" as="h1">ABOUT</SectionTitle>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-10 md:gap-16 items-start">
           {/* Image */}
           <div className="aspect-square bg-[#C8C8C8] flex items-center justify-center">
