@@ -14,7 +14,7 @@ export default function ServiceCard({ title, description, isLast = false }: Serv
       <h3 className="text-(--color-accent) text-lg font-bold tracking-wide border-b border-(--color-primary)/20 pb-4">
         {title}
       </h3>
-      <p className="text-[#1a1a1a]/70 text-sm leading-loose tracking-wide">
+      <p className="text-(--color-text)/70 text-sm leading-loose tracking-wide">
         {description}
       </p>
     </div>

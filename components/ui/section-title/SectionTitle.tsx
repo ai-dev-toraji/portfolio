@@ -12,7 +12,7 @@ export default function SectionTitle({ children, color = "primary" }: SectionTit
   };
 
   return (
-    <h2 className={`text-center ${colorClass[color]} text-4xl md:text-5xl font-black tracking-[0.3em] mb-16`}>
+    <h2 className={`text-center ${colorClass[color]} text-4xl md:text-5xl font-black tracking-[0.1em] mb-16`}>
       {children}
     </h2>
   );

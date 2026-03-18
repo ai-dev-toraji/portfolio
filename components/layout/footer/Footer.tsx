@@ -2,15 +2,15 @@ import Link from "next/link";
 import Image from "next/image";
 
 const navItems = [
-  { label: "About", href: "#about" },
-  { label: "Service", href: "#service" },
-  { label: "Works", href: "#works" },
-  { label: "Contact", href: "#contact" },
+  { label: "About", href: "/about" },
+  { label: "Service", href: "/service" },
+  { label: "Works", href: "/works" },
+  { label: "Contact", href: "/contact" },
 ];
 
 export default function Footer() {
   return (
-    <footer className="bg-(--color-primary) py-12">
+    <footer className="bg-(--color-primary) py-12 border-t border-(--color-sub)">
       <div className="max-w-6xl mx-auto px-6 flex flex-col items-center gap-8">
         {/* Footer Nav */}
         <nav className="flex flex-wrap justify-center gap-8">
