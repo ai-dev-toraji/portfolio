@@ -1,9 +1,9 @@
 import Image from "next/image";
 
 export type Skill = {
-  name: string;
-  description: string;
   iconSrc: string;
+  name: string;
+  experience?: number;
 };
 
 export default function SkillItem({ skill }: { skill: Skill }) {
@@ -16,7 +16,7 @@ export default function SkillItem({ skill }: { skill: Skill }) {
       </div>
       <div>
         <h4 className="text-white font-bold text-base mb-1.5">{skill.name}</h4>
-        <p className="text-white text-xs leading-relaxed">{skill.description}</p>
+        <span className="text-white text-xs leading-relaxed">使用経験：{skill.experience}年目</span>
       </div>
     </div>
   );
