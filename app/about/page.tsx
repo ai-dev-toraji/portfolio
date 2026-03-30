@@ -5,7 +5,7 @@ import SkillSection from "./components/SkillSection";
 import { type Skill } from "./components/SkillItem";
 
 export const metadata = {
-  title: "About | MORI CORDER",
+  title: "About | NEXTORA",
 };
 
 const profileGroups: ProfileGroup[] = [

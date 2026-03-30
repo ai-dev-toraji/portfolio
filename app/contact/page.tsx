@@ -3,7 +3,7 @@ import Footer from "@/components/layout/footer";
 import ContactForm from "./components/ContactForm";
 
 export const metadata = {
-  title: "Contact | MORI CORDER",
+  title: "Contact | NEXTORA",
 };
 
 export default function ContactPage() {

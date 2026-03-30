@@ -2,10 +2,10 @@ import Header from "@/components/layout/header";
 import Footer from "@/components/layout/footer";
 import ServiceList from "./components/ServiceList";
 import PriceSection from "./components/PriceSection";
-import FlowSection from "./components/FlowSection";
+// import FlowSection from "./components/FlowSection";
 
 export const metadata = {
-  title: "Service | MORI CORDER",
+  title: "Service | NEXTORA",
 };
 
 export default function ServicePage() {
@@ -15,7 +15,7 @@ export default function ServicePage() {
       <main className="pt-16">
         <ServiceList />
         <PriceSection />
-        <FlowSection />
+        {/* <FlowSection /> */}
       </main>
       <Footer />
     </>

@@ -94,7 +94,7 @@ export async function POST(req: NextRequest) {
 
   const mailOptions = {
     from: `"${name}" <${email}>`,
-    to: `"MORI CORDER" <${process.env.GMAIL_USER}>`,
+    to: `"NEXTORA" <${process.env.GMAIL_USER}>`,
     replyTo: email,
     subject: `【お問い合わせ】${name} 様より`,
     text: [
