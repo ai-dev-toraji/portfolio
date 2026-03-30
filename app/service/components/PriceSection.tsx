@@ -1,24 +1,18 @@
 import SectionTitle from "@/components/ui/section-title";
 
 const prices1 = [
-  { item: "LPコーディング", price: "50000円～" },
-  { item: "トップページ", price: "50000円～" },
-  { item: "下層ページ", price: "10000円～" },
-  { item: "流し込みページ", price: "8000円～" },
-  { item: "LPコーディング", price: "50000円～" },
-  { item: "JSなどによるカスタマイズ", price: "50000円～" },
-  { item: "WordPress構築", price: "100000円～" },
-  { item: "サイト改修", price: "50000円～" },
+  { item: "フロントエンド開発", price: "1人月：500,000円～" },
+  { item: "サイト保守・運用", price: "時給：3200円～" },
 ];
 
 const prices2 = [
-  { item: "LPコーディング", price: "50000円～" },
   { item: "トップページ", price: "50000円～" },
   { item: "下層ページ", price: "10000円～" },
-  { item: "流し込みページ", price: "8000円～" },
-  { item: "JSなどによるカスタマイズ", price: "50000円～" },
-  { item: "WordPress構築", price: "100000円～" },
-  { item: "サイト改修", price: "50000円～" },
+  { item: "下層ページ（流し込み）", price: "8000円～" },
+  { item: "LPコーディング", price: "50000円～" },
+  { item: "JSなどによるカスタマイズ", price: "10000円～" },
+  { item: "WordPress構築(オリジナルテーマ)", price: "100000円～" },
+  { item: "サイト保守・運用", price: "時給：3000円～" },
 ];
 
 export default function PriceSection() {
@@ -29,7 +23,7 @@ export default function PriceSection() {
 
         <div className="mx-auto bg-white px-4 py-8 md:p-8">
           <h3 className="text-(--color-primary) text-2xl font-bold tracking-wide mb-4">
-            Webアプリ開発
+            フロントエンド開発 (React.js,Next.js)
           </h3>
           <table className="w-full border border-white/40 text-sm">
             <tbody>
@@ -58,6 +52,9 @@ export default function PriceSection() {
               ))}
             </tbody>
           </table>
+          <p className="text-(--color-text)/70 text-sm mt-4">
+            ※料金は目安です。詳細はお問い合わせください。また、ドメインとサーバー代は別途必要です。
+          </p>
         </div>
       </div>
     </section>
