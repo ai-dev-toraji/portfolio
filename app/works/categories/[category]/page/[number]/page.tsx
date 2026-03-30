@@ -70,6 +70,7 @@ export default async function CategoryPageNumber({ params }: Props) {
                   {pagedWorks.map((work) => (
                     <WorksCard
                       key={work.id}
+                      id={work.id}
                       title={work.title}
                       tags={work.tags}
                       categories={work.categories}

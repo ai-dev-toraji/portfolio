@@ -23,7 +23,7 @@ export default function WorksContent({ works, categories, currentPage, totalPage
           <div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-8 md:gap-10">
               {works.map((work) => (
-                <WorksCard key={work.id} title={work.title} tags={work.tags} categories={work.categories} imageSrc={work.imageSrc} />
+                <WorksCard key={work.id} id={work.id} title={work.title} tags={work.tags} categories={work.categories} imageSrc={work.imageSrc} />
               ))}
             </div>
             <div className="mt-16">

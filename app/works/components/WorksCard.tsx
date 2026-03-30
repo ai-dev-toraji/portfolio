@@ -1,17 +1,19 @@
 import Image from "next/image";
+import Link from "next/link";
 
 type WorksCardProps = {
+  id: number;
   title: string;
   tags: string[];
   categories: string[];
   imageSrc: string;
 };
 
-export default function WorksCard({ title, tags, categories, imageSrc}: WorksCardProps) {
+export default function WorksCard({ id, title, tags, categories, imageSrc}: WorksCardProps) {
   return (
-    <div className="cursor-pointer group">
+    <Link href={`/works/${id}`} className="cursor-pointer group block">
       <div className="aspect-[4/3] bg-[#C8C8C8] mb-3 overflow-hidden">
-        <Image className="w-full h-full object-cover" src={imageSrc} alt={title} width={236} height={150} />
+        <Image className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" src={imageSrc} alt={title} width={236} height={150} />
       </div>
       <div className="flex flex-wrap gap-1 mb-2">
       <span className="text-xs text-(--color-text) font-bold tracking-wide">担当：</span>
@@ -32,6 +34,6 @@ export default function WorksCard({ title, tags, categories, imageSrc}: WorksCar
           </span>
         ))}
       </div>
-    </div>
+    </Link>
   );
 }
