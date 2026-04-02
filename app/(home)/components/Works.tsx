@@ -1,15 +1,9 @@
 import Button from "@/components/ui/button";
 import SectionTitle from "@/components/ui/section-title";
 import WorksCard from "@/components/ui/works-card";
+import { works } from "@/app/works/page";
 
-const works = [
-  { id: 1, title: "Work 01", category: "Web Design" },
-  { id: 2, title: "Work 02", category: "WordPress" },
-  { id: 3, title: "Work 03", category: "Frontend" },
-  { id: 4, title: "Work 04", category: "Web Design" },
-  { id: 5, title: "Work 05", category: "Coding" },
-  { id: 6, title: "Work 06", category: "Frontend" },
-];
+const latestWorks = [...works].sort((a, b) => b.id - a.id).slice(0, 6);
 
 export default function Works() {
   return (
@@ -19,12 +13,15 @@ export default function Works() {
         <SectionTitle color="accent">WORKS</SectionTitle>
 
         {/* Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-1">
-          {works.map((work) => (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+          {latestWorks.map((work) => (
             <WorksCard
               key={work.id}
+              id={work.id}
               title={work.title}
-              category={work.category}
+              imageSrc={work.imageSrc}
+              tags={work.tags}
+              categories={work.categories}
             />
           ))}
         </div>

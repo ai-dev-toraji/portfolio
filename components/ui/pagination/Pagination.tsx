@@ -18,7 +18,7 @@ export default function Pagination({ currentPage, totalPages, basePath }: Pagina
 
   const arrowPath = "M-5.24541e-07 6.41606L35.5 6.41605L26.5 0.416016";
   const arrowClass = "md:w-8 md:h-1.5 w-6 h-1";
-  const linkClass = "md:text-base text-sm text-(--color-primary) hover:text-(--color-accent) transition-colors duration-300";
+  const linkClass = "md:text-base text-sm text-white hover:text-(--color-accent) transition-colors duration-300";
 
   return (
     <div className="flex justify-center items-center gap-4 md:gap-6">
@@ -30,7 +30,7 @@ export default function Pagination({ currentPage, totalPages, basePath }: Pagina
           PREV
         </Link>
       ) : (
-        <span className="flex items-center gap-2 md:text-base text-sm text-(--color-text)/30 cursor-not-allowed">
+        <span className="flex items-center gap-2 md:text-base text-sm text-white/30  cursor-not-allowed">
           <svg viewBox="0 0 38 7" fill="none" xmlns="http://www.w3.org/2000/svg" className={`scale-x-[-1] ${arrowClass}`}>
             <path d={arrowPath} stroke="currentColor" strokeWidth="1" />
           </svg>
@@ -58,7 +58,7 @@ export default function Pagination({ currentPage, totalPages, basePath }: Pagina
           </svg>
         </Link>
       ) : (
-        <span className="flex items-center gap-2 md:text-base text-sm text-(--color-text)/30 cursor-not-allowed">
+        <span className="flex items-center gap-2 md:text-base text-sm text-white/30 cursor-not-allowed">
           NEXT
           <svg viewBox="0 0 38 7" fill="none" xmlns="http://www.w3.org/2000/svg" className={arrowClass}>
             <path d={arrowPath} stroke="currentColor" strokeWidth="1" />

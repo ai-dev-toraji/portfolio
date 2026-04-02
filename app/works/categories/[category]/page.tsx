@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import Header from "@/components/layout/header";
 import Footer from "@/components/layout/footer";
 import SectionTitle from "@/components/ui/section-title";
-import WorksCard from "../../components/WorksCard";
+import WorksCard from "@/components/ui/works-card";
 import CategorySelector from "@/components/layout/category-selector/CategorySelector";
 import Pagination from "@/components/ui/pagination";
 import { works, categories, ITEMS_PER_PAGE } from "../../page";
@@ -45,9 +45,9 @@ export default async function CategoryPage({ params }: Props) {
     <>
       <Header />
       <main className="pt-16">
-        <section className="bg-(--color-sub) py-20 md:py-28 min-h-[calc(100vh-64px)]">
+        <section className="bg-(--color-primary) py-20 md:py-28 min-h-[calc(100vh-64px)]">
           <div className="max-w-6xl mx-auto px-6">
-            <SectionTitle color="primary" as="h1">WORK</SectionTitle>
+            <SectionTitle color="accent" as="h1">WORK</SectionTitle>
 
             <div className="grid grid-cols-1 md:grid-cols-[1fr_5fr] gap-8 mb-16">
               <CategorySelector categories={categories} />
