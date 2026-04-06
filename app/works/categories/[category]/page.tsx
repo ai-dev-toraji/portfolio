@@ -5,21 +5,23 @@ import SectionTitle from "@/components/ui/section-title";
 import WorksCard from "@/components/ui/works-card";
 import CategorySelector from "@/components/layout/category-selector/CategorySelector";
 import Pagination from "@/components/ui/pagination";
-import { works, categories, ITEMS_PER_PAGE } from "../../page";
+import { getWorksList, getWorkCategoryList, getAllCategoryWithTotalCount } from "@/api/microCMS/works";
+import { ITEMS_PER_PAGE } from "../../page";
 
 type Props = {
   params: Promise<{ category: string }>;
 };
 
 export async function generateStaticParams() {
-  return categories.map((cat) => ({
-    category: cat.value,
-  }));
+  const categoryList = await getWorkCategoryList();
+  if (!categoryList) return [];
+  return categoryList.map((cat) => ({ category: cat.value }));
 }
 
 export async function generateMetadata({ params }: Props) {
   const { category } = await params;
-  const cat = categories.find((c) => c.value === category);
+  const categoryList = await getWorkCategoryList();
+  const cat = categoryList?.find((c) => c.value === category);
   return {
     title: `${cat?.label ?? category} | Works | NEXTORA`,
   };
@@ -27,18 +29,24 @@ export async function generateMetadata({ params }: Props) {
 
 export default async function CategoryPage({ params }: Props) {
   const { category } = await params;
-  const cat = categories.find((c) => c.value === category);
 
-  if (!cat) {
-    notFound();
-  }
+  const [categoryList, allCategories, allWorks] = await Promise.all([
+    getWorkCategoryList(),
+    getAllCategoryWithTotalCount(),
+    getWorksList({ limit: 1, fields: 'id' }),
+  ]);
 
-  const allFiltered = works
-    .filter((work) => work.categories.includes(cat.label))
-    .sort((a, b) => b.id - a.id);
+  const cat = categoryList?.find((c) => c.value === category);
+  if (!cat) notFound();
 
-  const totalPages = Math.ceil(allFiltered.length / ITEMS_PER_PAGE);
-  const pagedWorks = allFiltered.slice(0, ITEMS_PER_PAGE);
+  const worksList = await getWorksList({
+    limit: ITEMS_PER_PAGE,
+    fields: "id,title,eyecatch,tag,category,publishedAt",
+    orders: "-publishedAt",
+    filters: `category[contains]${cat.id}`,
+  });
+
+  const totalPages = Math.ceil(worksList.totalCount / ITEMS_PER_PAGE);
   const basePath = `/works/categories/${category}`;
 
   return (
@@ -47,23 +55,23 @@ export default async function CategoryPage({ params }: Props) {
       <main className="pt-16">
         <section className="bg-(--color-primary) py-20 md:py-28 min-h-[calc(100vh-64px)]">
           <div className="max-w-6xl mx-auto px-6">
-            <SectionTitle color="accent" as="h1">WORK</SectionTitle>
+            <SectionTitle color="accent" as="h1">{cat.label}</SectionTitle>
 
-            <div className="grid grid-cols-1 md:grid-cols-[1fr_5fr] gap-8 mb-16">
-              <CategorySelector categories={categories} />
+            <div className="grid grid-cols-1 md:grid-cols-[1fr_4fr] gap-8 mb-16">
+              <CategorySelector categories={allCategories} totalCount={allWorks.totalCount} />
 
               <div>
-                {pagedWorks.length > 0 ? (
+                {worksList.contents.length > 0 ? (
                   <>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-8 md:gap-10">
-                      {pagedWorks.map((work) => (
+                      {worksList.contents.map((work) => (
                         <WorksCard
                           key={work.id}
                           id={work.id}
                           title={work.title}
-                          tags={work.tags}
-                          categories={work.categories}
-                          imageSrc={work.imageSrc}
+                          tags={work.tag}
+                          categories={work.category}
+                          eyecatch={work.eyecatch}
                         />
                       ))}
                     </div>
@@ -72,7 +80,7 @@ export default async function CategoryPage({ params }: Props) {
                     </div>
                   </>
                 ) : (
-                  <p className="text-center text-(--color-text)/50 text-sm">
+                  <p className="text-center text-(--color-accent)/50 text-sm">
                     該当する実績がありません。
                   </p>
                 )}

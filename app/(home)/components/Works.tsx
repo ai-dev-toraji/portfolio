@@ -1,27 +1,29 @@
 import Button from "@/components/ui/button";
 import SectionTitle from "@/components/ui/section-title";
 import WorksCard from "@/components/ui/works-card";
-import { works } from "@/app/works/page";
+import { getWorksList } from "@/api/microCMS/works";
 
-const latestWorks = [...works].sort((a, b) => b.id - a.id).slice(0, 6);
+export default async function Works() {
+  const worksList = await getWorksList({
+    limit: 6,
+    fields: "id,title,eyecatch,tag,category,publishedAt",
+    orders: "-publishedAt",
+  });
 
-export default function Works() {
   return (
     <section id="works" className="bg-(--color-primary) py-20 md:py-28">
       <div className="max-w-6xl mx-auto px-6">
-        {/* Section Title */}
         <SectionTitle color="accent">WORKS</SectionTitle>
 
-        {/* Grid */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-          {latestWorks.map((work) => (
+          {worksList.contents.map((work) => (
             <WorksCard
               key={work.id}
               id={work.id}
               title={work.title}
-              imageSrc={work.imageSrc}
-              tags={work.tags}
-              categories={work.categories}
+              eyecatch={work.eyecatch}
+              tags={work.tag}
+              categories={work.category}
             />
           ))}
         </div>

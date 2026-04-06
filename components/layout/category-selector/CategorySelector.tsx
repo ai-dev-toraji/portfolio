@@ -2,13 +2,14 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { type Category } from "@/app/works/page";
+import type { CategoryWithCount } from "@/api/microCMS/works/types";
 
 type CategorySelectorProps = {
-  categories: Category[];
+  categories: CategoryWithCount[];
+  totalCount: number;
 };
 
-export default function CategorySelector({ categories }: CategorySelectorProps) {
+export default function CategorySelector({ categories, totalCount }: CategorySelectorProps) {
   const pathname = usePathname();
 
   const isActive = (value: string) => pathname === `/works/categories/${value}`;
@@ -25,7 +26,7 @@ export default function CategorySelector({ categories }: CategorySelectorProps) 
         href="/works"
         className={`${baseClass} ${isAll ? activeClass : inactiveClass}`}
       >
-        すべて
+        すべて（{totalCount}）
       </Link>
       {categories.map((cat) => (
         <Link
@@ -33,7 +34,7 @@ export default function CategorySelector({ categories }: CategorySelectorProps) 
           href={`/works/categories/${cat.value}`}
           className={`${baseClass} ${isActive(cat.value) ? activeClass : inactiveClass}`}
         >
-          {cat.label}
+          {cat.label}（{cat.totalCount}）
         </Link>
       ))}
     </div>
