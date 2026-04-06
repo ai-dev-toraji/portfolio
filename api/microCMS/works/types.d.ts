@@ -9,6 +9,7 @@ export type WorksContent = {
   skill?: WorkSkillContent[];
   periodStart: Date;
   periodEnd?: Date;
+  siteUrl?: string;
   pcImg?: MicroCMSImage;
   spImg?: MicroCMSImage;
   content?: string;

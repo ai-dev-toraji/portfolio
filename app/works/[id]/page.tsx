@@ -3,33 +3,43 @@ import Image from "next/image";
 import Link from "next/link";
 import Header from "@/components/layout/header";
 import Footer from "@/components/layout/footer";
-import { works } from "../page";
+import { getAllWorks, getWorksDetail } from "@/api/microCMS/works";
+import RichEditor from "@/components/ui/rich-editor";
 
 type Props = {
   params: Promise<{ id: string }>;
 };
 
 export async function generateStaticParams() {
-  return works.map((work) => ({ id: String(work.id) }));
+  const allWorks = await getAllWorks({ fields: "id" });
+  if (!allWorks) return [];
+  return allWorks.map((work) => ({ id: work.id }));
 }
 
 export async function generateMetadata({ params }: Props) {
   const { id } = await params;
-  const work = works.find((w) => w.id === Number(id));
+  const work = await getWorksDetail(id);
   return {
-    title: `${work?.title ?? "Works"} | MORI CORDER`,
+    title: `${work?.title ?? "Works"} | NEXTORA`,
   };
 }
 
 export default async function WorkDetailPage({ params }: Props) {
   const { id } = await params;
-  const work = works.find((w) => w.id === Number(id));
+  const work = await getWorksDetail(id);
 
   if (!work) notFound();
 
-  const formattedDate = work.publishedAt.replace("-", "年") + "月";
+  const publishedDate = work.publishedAt
+    ? new Date(work.publishedAt).toLocaleDateString("ja-JP", { year: "numeric", month: "long" })
+    : "";
 
-  const sortedWorks = [...works].sort((a, b) => a.id - b.id);
+  // 前後の記事を取得（publishedAt の降順）
+  const allWorks = await getAllWorks({
+    fields: "id,title,publishedAt",
+    orders: "-publishedAt",
+  });
+  const sortedWorks = allWorks ?? [];
   const currentIndex = sortedWorks.findIndex((w) => w.id === work.id);
   const prevWork = currentIndex > 0 ? sortedWorks[currentIndex - 1] : null;
   const nextWork = currentIndex < sortedWorks.length - 1 ? sortedWorks[currentIndex + 1] : null;
@@ -37,14 +47,14 @@ export default async function WorkDetailPage({ params }: Props) {
   return (
     <>
       <Header />
-      <main className="pt-16">
+      <main className="pt-4">
         <article className="bg-(--color-sub) py-20 md:py-28 min-h-[calc(100vh-64px)]">
           <div className="max-w-4xl mx-auto px-6">
 
             {/* Meta */}
             <div className="mb-6">
               <time className="text-xs text-(--color-text)/50 tracking-widest">
-                {formattedDate}
+                {publishedDate}
               </time>
             </div>
 
@@ -54,46 +64,83 @@ export default async function WorkDetailPage({ params }: Props) {
             </h1>
 
             {/* Categories */}
-            <div className="flex flex-wrap items-center gap-2 mb-3">
-              <span className="text-xs text-(--color-text)/60 tracking-wide">担当：</span>
-              {work.categories.map((cat, i) => (
-                <span key={i} className="text-xs text-(--color-primary) tracking-wide">
-                  {cat}{i < work.categories.length - 1 && <span className="text-(--color-primary)/40 mx-1">/</span>}
-                </span>
-              ))}
-            </div>
+            {work.category && work.category.length > 0 && (
+              <div className="flex flex-wrap items-center gap-2 mb-3">
+                <span className="text-xs text-(--color-text)/60 tracking-wide">担当：</span>
+                {work.category.map((cat, i) => (
+                  <span key={cat.id} className="text-xs text-(--color-primary) tracking-wide">
+                    {cat.label}{i < work.category!.length - 1 && <span className="text-(--color-primary)/40 mx-1">/</span>}
+                  </span>
+                ))}
+              </div>
+            )}
 
             {/* Tags */}
-            <div className="flex flex-wrap gap-2 mb-10">
-              {work.tags.map((tag, i) => (
-                <span
-                  key={i}
-                  className="text-xs border border-(--color-primary) text-(--color-primary) px-2 py-0.5 bg-white"
-                >
-                  {tag}
+            {work.tag && work.tag.length > 0 && (
+              <div className="flex flex-wrap gap-2 mb-3">
+                <span className="text-xs text-(--color-text)/60 tracking-wide">タグ：</span>
+                {work.tag.map((tag) => (
+                  <span
+                    key={tag.id}
+                    className="text-xs border border-(--color-primary) text-(--color-primary) px-2 py-0.5 bg-white"
+                  >
+                    {tag.tag}
+                  </span>
+                ))}
+              </div>
+            )}
+
+            {/* Skills */}
+              {work.skill && work.skill.length > 0 && (
+                <div className="flex flex-wrap gap-2 mb-3">
+                  <span className="text-xs text-(--color-text)/60 tracking-wide">スキル：</span>
+                  {work.skill.map((skill) => (
+                    <span
+                      key={skill.id}
+                      className="text-xs border border-(--color-primary) text-(--color-primary) px-2 py-0.5 bg-white"
+                    >
+                      {skill.skill}
+                    </span>
+                  ))}
+                </div>
+              )}
+
+            {/* Period */}
+            {(work.periodStart || work.periodEnd) && (
+              <div className="flex flex-wrap gap-2 mb-3">
+                <span className="text-xs text-(--color-text)/60 tracking-wide">実装期間：</span>
+                <span className="text-xs text-(--color-text)/60 tracking-wide">
+                  {work.periodStart && new Date(work.periodStart).toLocaleDateString("ja-JP", { year: "numeric", month: "long", day: "numeric" })}
+                  {work.periodStart && work.periodEnd && " 〜 "}
+                  {work.periodEnd && new Date(work.periodEnd).toLocaleDateString("ja-JP", { year: "numeric", month: "long", day: "numeric" })}
                 </span>
-              ))}
-            </div>
+              </div>
+            )}
+
+            {work.siteUrl && (
+              <div className="flex flex-wrap gap-2 mb-3">
+                <span className="text-xs text-(--color-text)/60 tracking-wide">サイトURL：</span>
+                <Link href={work.siteUrl} target="_blank" className="text-xs text-(--color-primary) tracking-wide">
+                  {work.siteUrl}
+                </Link>
+              </div>
+            )}
 
             {/* Thumbnail */}
-            <div className="aspect-[16/9] bg-[#C8C8C8] mb-12 overflow-hidden">
-              <Image
-                src={work.imageSrc}
-                alt={work.title}
-                width={896}
-                height={504}
-                className="w-full h-full object-cover"
-              />
-            </div>
+            {/* {(work.pcImg || work.eyecatch) && (
+              <div className="aspect-[16/9] bg-[#C8C8C8] mb-12 overflow-hidden">
+                <Image
+                  src={(work.pcImg ?? work.eyecatch)!.url}
+                  alt={work.title}
+                  width={(work.pcImg ?? work.eyecatch)!.width ?? 896}
+                  height={(work.pcImg ?? work.eyecatch)!.height ?? 504}
+                  className="w-full h-full object-cover"
+                />
+              </div>
+            )} */}
 
             {/* Rich editor content */}
-            <div
-              className="prose prose-sm md:prose-base max-w-none text-(--color-text)
-                prose-headings:font-bold prose-headings:text-(--color-primary) prose-headings:tracking-wide
-                prose-h2:text-xl prose-h2:mt-10 prose-h2:mb-4 prose-h2:pb-2 prose-h2:border-b prose-h2:border-(--color-primary)/20
-                prose-p:leading-loose prose-p:text-(--color-text)/80"
-              dangerouslySetInnerHTML={{ __html: work.content }}
-            />
+            {work.content && <RichEditor content={work.content} />}
 
             {/* Navigation */}
             <div className="mt-16 pt-10 border-t border-(--color-primary)/20">
