@@ -75,8 +75,6 @@ export const getWorksDetail = async (
   draftKey?: string,
   queries?: MicroCMSQueries,
 ) => {
-  const revalidateTime = process.env.NODE_ENV === 'development' ? 1 : 60
-
   const cachedGetWorksDetail = unstable_cache(
     async (contentId?: string, draftKey?: string, queries?: MicroCMSQueries) => {
       const detailData = await client
@@ -92,7 +90,7 @@ export const getWorksDetail = async (
           customRequestInit: {
             next: {
               tags: [`works-${contentId}`],
-              revalidate: revalidateTime,
+              revalidate: 60,
             },
           },
         })
@@ -105,7 +103,7 @@ export const getWorksDetail = async (
     ['works-detail'],
     {
       tags: [`works`, `works-${contentId}`],
-      revalidate: revalidateTime,
+      revalidate: 60,
     },
   )
 
@@ -125,7 +123,7 @@ export const getWorksDetailDraft = async (
       queries: {
         draftKey,
         fields:
-          'id,title,eyecatch,category,tag,skill,periodStart,periodEnd,pcImg,spImg,content,createdAt,publishedAt,updatedAt,revisedAt',
+          'id,title,eyecatch,category,tag,skill,periodStart,periodEnd,siteUrl,pcImg,spImg,content,createdAt,publishedAt,updatedAt,revisedAt',
         ...queries,
       },
     })

@@ -11,6 +11,7 @@ const nextConfig: NextConfig = {
       {
         protocol: "https",
         hostname: "images.microcms-assets.io",
+        port: "",
       },
     ],
   },

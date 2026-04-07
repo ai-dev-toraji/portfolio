@@ -14,8 +14,15 @@ type WorksCardProps = {
 export default function WorksCard({ id, title, eyecatch, tags, categories }: WorksCardProps) {
   return (
     <Link href={`/works/${id}`} className="cursor-pointer group block">
-      <div className="aspect-[4/3] bg-[#C8C8C8] mb-3 overflow-hidden">
-        <Image className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" src={eyecatch?.url || '/works/thumbnail.jpg'} alt={title} width={270} height={200} />
+      <div className="relative aspect-[4/3] bg-[#C8C8C8] mb-3 overflow-hidden">
+        <Image
+          className="object-cover object-center transition-transform duration-300 group-hover:scale-105"
+          src={eyecatch?.url || '/works/thumbnail.jpg'}
+          alt={title}
+          fill
+          sizes="(max-width: 768px) 100vw, 33vw"
+          unoptimized={!!eyecatch?.url}
+        />
       </div>
       {categories && categories.length > 0 && (
         <div className="flex flex-wrap gap-1 mb-2">

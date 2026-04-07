@@ -127,17 +127,17 @@ export default async function WorkDetailPage({ params }: Props) {
             )}
 
             {/* Thumbnail */}
-            {/* {(work.pcImg || work.eyecatch) && (
-              <div className="aspect-[16/9] bg-[#C8C8C8] mb-12 overflow-hidden">
+            {(work.eyecatch) && (
+              <div className="w-full h-full aspect-[5/3] mt-8 bg-[#C8C8C8] mb-12 overflow-hidden">
                 <Image
                   src={(work.pcImg ?? work.eyecatch)!.url}
                   alt={work.title}
                   width={(work.pcImg ?? work.eyecatch)!.width ?? 896}
                   height={(work.pcImg ?? work.eyecatch)!.height ?? 504}
-                  className="w-full h-full object-cover"
+                  className="w-full h-full object-cover object-top"
                 />
               </div>
-            )} */}
+            )}
 
             {/* Rich editor content */}
             {work.content && <RichEditor content={work.content} />}
