@@ -16,6 +16,9 @@ export const metadata: Metadata = {
   verification: {
     google: "ZWCqR6vsa-to8eNBl3dKyIP6bvmTeowsZqhSfiGxFJA",
   },
+  icons: {
+    icon: "/logo_nextora.svg",
+  },
 };
 
 export default function RootLayout({
