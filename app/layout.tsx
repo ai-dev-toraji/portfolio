@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Noto_Serif_JP } from "next/font/google";
+import { GoogleAnalytics } from "@next/third-parties/google";
 import "./globals.css";
 
 const notoSerifJP = Noto_Serif_JP({
@@ -24,6 +25,7 @@ export default function RootLayout({
       <body className={`${notoSerifJP.variable} antialiased`}>
         {children}
       </body>
+      <GoogleAnalytics gaId="G-SCR8CXXQVR" />
     </html>
   );
 }
