@@ -371,37 +371,27 @@ export const getWorksCategoryIdFromParams = async (category: string) => {
 export const getAllCategoryWithTotalCount = async () => {
   const cachedGetAllCategoryWithTotalCount = unstable_cache(
     async () => {
-      const allExistCategoryWorks = await getAllWorks({
-        fields: 'category',
-        filters: 'category[exists]',
-      })
+      const [categoryList, allExistCategoryWorks] = await Promise.all([
+        getWorkCategoryList(),
+        getAllWorks({
+          fields: 'category',
+          filters: 'category[exists]',
+        }),
+      ])
 
-      // カテゴリの重複を除去し、各カテゴリの詳細情報を保持
-      const uniqueCategoriesMap = new Map()
+      // microCMS のカテゴリー表示順を維持しつつ件数を付与
+      const existCategory = categoryList
+        .map((category) => {
+          const totalCount = allExistCategoryWorks.filter((item) =>
+            item.category?.some((cat) => cat && cat.id === category.id),
+          ).length
+          return {
+            ...category,
+            totalCount,
+          }
+        })
+        .filter((category) => category.totalCount > 0)
 
-      allExistCategoryWorks.forEach((item) => {
-        if (item.category) {
-          item.category.forEach((category) => {
-            if (category && category.id) {
-              if (!uniqueCategoriesMap.has(category.id)) {
-                uniqueCategoriesMap.set(category.id, category)
-              }
-            }
-          })
-        }
-      })
-
-      const uniqueCategories = Array.from(uniqueCategoriesMap.values())
-
-      const existCategory = uniqueCategories.map((category) => {
-        const totalCount = allExistCategoryWorks.filter((item) =>
-          item.category?.some((cat) => cat && cat.id === category.id),
-        ).length
-        return {
-          ...category,
-          totalCount,
-        }
-      })
       return existCategory
     },
     ['works-category-with-total-count'],
