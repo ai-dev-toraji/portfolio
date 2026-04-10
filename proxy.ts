@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 
 export function proxy(req: NextRequest) {
-  if (process.env.NODE_ENV !== "production") {
+  // ローカル開発・本番環境は Basic 認証をスキップ
+  if (process.env.VERCEL_ENV !== "preview") {
     return NextResponse.next();
   }
 
