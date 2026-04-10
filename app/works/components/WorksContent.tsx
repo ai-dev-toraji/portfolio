@@ -20,7 +20,7 @@ export default function WorksContent({ works, categories, currentPage, totalPage
     <section className="bg-(--color-primary) py-20 md:py-28">
       <div className="max-w-6xl mx-auto px-6">
         <SectionTitle color="accent" as="h1">WORK</SectionTitle>
-
+        <p className="text-sm text-white text-center mb-8">サイト制作、Webアプリ開発を含めた150件以上の実績の一部を掲載しております。</p>
         <div className="grid grid-cols-1 md:grid-cols-[1fr_4fr] gap-8 mb-16">
           <CategorySelector categories={categories} totalCount={works.totalCount} />
           <div>
