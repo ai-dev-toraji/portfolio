@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Noto_Serif_JP } from "next/font/google";
 import { GoogleAnalytics } from "@next/third-parties/google";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 import "./globals.css";
 
 const notoSerifJP = Noto_Serif_JP({
@@ -32,6 +33,7 @@ export default function RootLayout({
         {children}
       </body>
       <GoogleAnalytics gaId="G-SCR8CXXQVR" />
+      <SpeedInsights />
     </html>
   );
 }
