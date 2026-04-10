@@ -13,6 +13,9 @@ const notoSerifJP = Noto_Serif_JP({
 export const metadata: Metadata = {
   title: "NEXTORA | Portfolio",
   description: "ポートフォリオサイトです。",
+  verification: {
+    google: "ZWCqR6vsa-to8eNBl3dKyIP6bvmTeowsZqhSfiGxFJA",
+  },
 };
 
 export default function RootLayout({
