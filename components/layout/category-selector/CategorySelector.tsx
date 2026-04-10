@@ -12,7 +12,7 @@ type CategorySelectorProps = {
 export default function CategorySelector({ categories, totalCount }: CategorySelectorProps) {
   const pathname = usePathname();
 
-  const isActive = (value: string) => pathname === `/works/categories/${value}`;
+  const isActive = (value: string) => pathname === `/works/categories/${value.trim()}`;
 
   const isAll = pathname === "/works";
 
@@ -30,8 +30,8 @@ export default function CategorySelector({ categories, totalCount }: CategorySel
       </Link>
       {categories.map((cat) => (
         <Link
-          key={cat.value}
-          href={`/works/categories/${cat.value}`}
+          key={cat.value.trim()}
+          href={`/works/categories/${cat.value.trim()}`}
           className={`${baseClass} ${isActive(cat.value) ? activeClass : inactiveClass}`}
         >
           {cat.label}（{cat.totalCount}）

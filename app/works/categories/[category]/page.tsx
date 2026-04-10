@@ -15,13 +15,13 @@ type Props = {
 export async function generateStaticParams() {
   const categoryList = await getWorkCategoryList();
   if (!categoryList) return [];
-  return categoryList.map((cat) => ({ category: cat.value }));
+  return categoryList.map((cat) => ({ category: cat.value.trim() }));
 }
 
 export async function generateMetadata({ params }: Props) {
   const { category } = await params;
   const categoryList = await getWorkCategoryList();
-  const cat = categoryList?.find((c) => c.value === category);
+  const cat = categoryList?.find((c) => c.value.trim() === category);
   return {
     title: `${cat?.label ?? category} | Works | NEXTORA`,
   };
@@ -36,7 +36,7 @@ export default async function CategoryPage({ params }: Props) {
     getWorksList({ limit: 1, fields: 'id' }),
   ]);
 
-  const cat = categoryList?.find((c) => c.value === category);
+  const cat = categoryList?.find((c) => c.value.trim() === category);
   if (!cat) notFound();
 
   const worksList = await getWorksList({

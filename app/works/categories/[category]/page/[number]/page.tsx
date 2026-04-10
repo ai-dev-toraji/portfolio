@@ -25,7 +25,7 @@ export async function generateStaticParams() {
     });
     const totalPages = Math.ceil(result.totalCount / ITEMS_PER_PAGE);
     for (let i = 2; i <= totalPages; i++) {
-      params.push({ category: cat.value, number: String(i) });
+      params.push({ category: cat.value.trim(), number: String(i) });
     }
   }
 
@@ -35,7 +35,7 @@ export async function generateStaticParams() {
 export async function generateMetadata({ params }: Props) {
   const { category, number } = await params;
   const categoryList = await getWorkCategoryList();
-  const cat = categoryList?.find((c) => c.value === category);
+  const cat = categoryList?.find((c) => c.value.trim() === category);
   return {
     title: `${cat?.label ?? category} - ${number}ページ目 | Works | NEXTORA`,
   };

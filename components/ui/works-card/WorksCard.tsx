@@ -37,9 +37,9 @@ export default function WorksCard({ id, title, eyecatch, tags, categories }: Wor
       <p className="text-md font-medium text-(--color-accent) mb-2">{title}</p>
       {tags && tags.length > 0 && (
         <div className="flex flex-wrap gap-1">
-          {tags.map((tag) => (
+          {tags.map((tag, i) => (
             <span
-              key={tag.id}
+              key={`${tag.id}-${i}`}
               className="text-xs border border-(--color-primary)/70 text-(--color-primary)/70 px-2 py-0.5 bg-white"
             >
               {tag.tag}
