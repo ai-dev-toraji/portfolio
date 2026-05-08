@@ -31,6 +31,7 @@ export default function RootLayout({
     <html lang="ja">
       <body className={`${notoSerifJP.variable} antialiased`}>
         {children}
+        <SpeedInsights />
       </body>
       <GoogleAnalytics gaId="G-SCR8CXXQVR" />
       <SpeedInsights />
