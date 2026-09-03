@@ -90,9 +90,16 @@ jobs:
       - name: 変更提案（Pull Request）を作る
         if: steps.claude.outputs.branch_name != ''
         env:
-          # Claude App のトークンを使う。既定の GITHUB_TOKEN で作った
-          # 変更提案では、後続の自動チェックが起動しないため。
-          GH_TOKEN: ${{ steps.claude.outputs.github_token }}
+          # ⚠️ アクションが出力する Claude App のトークン
+          # （steps.claude.outputs.github_token）は、この時点ですでに
+          # 無効化されており 401 Bad credentials になる。実地検証で確認済み。
+          # そのためワークフロー自身のトークンを使う。
+          #
+          # この場合、作られた変更提案では pull_request を起点とする検査が
+          # 起動しない（GitHub の仕様）。自動チェックを足すときは、
+          # 起点を push（fix/** ブランチへの反映）にすることで回避する。
+          # Vercel のプレビューは Vercel 自身の仕組みで作られるため影響しない。
+          GH_TOKEN: ${{ github.token }}
           BRANCH: ${{ steps.claude.outputs.branch_name }}
           ISSUE_NUMBER: ${{ github.event.issue.number }}
           REPO: ${{ github.repository }}
