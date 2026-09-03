@@ -97,14 +97,21 @@ jobs:
           ISSUE_NUMBER: ${{ github.event.issue.number }}
           REPO: ${{ github.repository }}
         run: |
-          set -euo pipefail
+          # -e は付けない。失敗を握りつぶさず、内容を見て判断するため。
+          set -uo pipefail
 
-          if ! gh api "repos/$REPO/branches/$BRANCH" >/dev/null 2>&1; then
-            echo "ブランチ $BRANCH がありません。変更が加えられなかったとみなして終了します。"
-            exit 0
+          echo "対象ブランチ: $BRANCH"
+
+          # 事前の存在確認はしない。確認が失敗しただけで「変更なし」と
+          # 誤判定し、静かに何もしない事故が実際に起きたため。
+          # 作成を試み、その結果で判断する。
+
+          EXISTING="$(gh pr list --repo "$REPO" --head "$BRANCH" --state open \
+            --json number --jq '.[0].number // empty' 2>&1)"
+          if [ $? -ne 0 ]; then
+            echo "既存の変更提案を確認できませんでした（続行します）: $EXISTING"
+            EXISTING=""
           fi
-
-          EXISTING="$(gh pr list --repo "$REPO" --head "$BRANCH" --state open --json number --jq '.[0].number // empty')"
           if [ -n "$EXISTING" ]; then
             echo "すでに変更提案 #$EXISTING があります。"
             exit 0
@@ -119,7 +126,21 @@ jobs:
             "" \
             "Closes #${ISSUE_NUMBER}")
 
-          gh pr create --repo "$REPO" --base develop --head "$BRANCH" \
-            --title "fix: 修正依頼 #${ISSUE_NUMBER} への対応" \
-            --body "$BODY" \
-            || echo "変更提案を作れませんでした（develop との差が無い可能性があります）。"
+          if OUT="$(gh pr create --repo "$REPO" --base develop --head "$BRANCH" \
+            --title "fix: 修正依頼 #${ISSUE_NUMBER} への対応" --body "$BODY" 2>&1)"; then
+            echo "変更提案を作成しました: $OUT"
+            exit 0
+          fi
+
+          echo "変更提案を作成できませんでした。理由:"
+          echo "$OUT"
+          case "$OUT" in
+            *"No commits between"*|*"no commits between"*)
+              echo "→ develop との差がないためです。異常ではありません。"
+              exit 0
+              ;;
+            *)
+              echo "→ 想定外の失敗です。仕組みの不具合として扱います。"
+              exit 1
+              ;;
+          esac
