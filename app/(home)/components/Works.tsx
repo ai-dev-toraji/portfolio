@@ -15,7 +15,7 @@ export default async function Works() {
       <div className="max-w-6xl mx-auto px-6">
         <SectionTitle color="accent">WORKS</SectionTitle>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-10">
           {worksList.contents.map((work) => (
             <WorksCard
               key={work.id}
