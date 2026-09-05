@@ -1,0 +1,214 @@
+# 見た目の自動チェック
+#
+# AI が作った修正ブランチについて、Vercel のプレビューを develop のプレビューと
+# 見比べ、結果を依頼の Issue に1つのコメントとして書き込む。
+#
+# 🔴 起点は「push」ではなく「fix-request からの呼び出し」である。
+#    AI の push はワークフローを起動しない（GitHub が無限ループを防ぐため、
+#    ワークフロー自身の資格情報による push ではイベントを発生させない）。
+#    2026-09-05 の実地検証で、修正ブランチにこのファイルが入っていても
+#    起動しないことを確認した。そのため fix-request.yml から続けて呼び出す。
+#
+# 🔴 このファイルは既定ブランチ（main）に無いと呼び出せない。
+#    呼び出し側の fix-request.yml が main で動くため、
+#    `./.github/workflows/visual-check.yml` は main の内容として解決される。
+#
+# 前提: リポジトリの Secrets に BASIC_AUTH_USER / BASIC_AUTH_PASSWORD があること
+#       （プレビューはアプリ側の Basic 認証で守られているため）
+
+name: visual-check
+
+on:
+  workflow_call:
+    inputs:
+      branch:
+        description: "検査する修正ブランチ"
+        required: true
+        type: string
+      issue_number:
+        description: "結果を書き込む依頼の番号"
+        required: true
+        type: string
+  # 手で試せるようにしておく（原因調べのときに要る）
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: "検査する修正ブランチ"
+        required: true
+        type: string
+      issue_number:
+        description: "結果を書き込む依頼の番号"
+        required: true
+        type: string
+
+concurrency:
+  group: visual-check-${{ inputs.branch }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ inputs.branch }}
+          fetch-depth: 1
+
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 24
+
+      # Vercel の作りかけを待つとき、どのコミットの結果を見るかの目印
+      - name: 検査するブランチの先頭を控える
+        id: head
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: 依頼から対象ページを取り出す
+        id: request
+        env:
+          REPO: ${{ github.repository }}
+          NUMBER: ${{ inputs.issue_number }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -uo pipefail
+          # 依頼の本文から、対象ページのパスを取る（表の「ページ」行）
+          BODY="$(gh issue view "$NUMBER" --repo "$REPO" --json body --jq '.body' 2>/dev/null)"
+          TARGET="$(printf %s "$BODY" | sed -n 's/^| ページ | `\(.*\)` |$/\1/p' | head -1)"
+          echo "対象ページ: ${TARGET:-（取得できず）}"
+          echo "target=$TARGET" >> "$GITHUB_OUTPUT"
+
+      - name: 検査に使う道具を用意する
+        working-directory: .github/scripts
+        run: |
+          npm ci || npm install
+          npx playwright install --with-deps chromium
+
+      # 安全網そのものが壊れていないかを先に確かめる。
+      # 判定を出す道具が壊れたまま「問題なし」と報告するのが最悪の失敗なので、ここは止める。
+      - name: 検査の道具を自己テストする
+        working-directory: .github/scripts
+        run: npm test
+
+      - name: 文法チェック
+        id: lint
+        continue-on-error: true
+        run: |
+          npm ci
+          npm run lint
+
+      - name: Vercel のプレビューができるまで待つ
+        id: preview
+        env:
+          REPO: ${{ github.repository }}
+          SHA: ${{ steps.head.outputs.sha }}
+          BRANCH: ${{ inputs.branch }}
+          GH_TOKEN: ${{ github.token }}
+          # Vercel のプレビュー URL は「プロジェクト名-git-ブランチ名-スコープ」で決まる
+          VERCEL_SCOPE: moritorajis-projects
+          VERCEL_PROJECT: portfolio
+        run: |
+          set -uo pipefail
+          STATE=""
+          for i in $(seq 1 40); do
+            STATE="$(gh api "repos/$REPO/commits/$SHA/status" --jq '.state' 2>/dev/null)"
+            echo "  Vercel の状態: ${STATE:-確認中}"
+            [ "$STATE" = "success" ] && break
+            [ "$STATE" = "failure" ] && break
+            sleep 15
+          done
+
+          case "$STATE" in
+            success) echo "state=success" >> "$GITHUB_OUTPUT" ;;
+            failure) echo "state=failure" >> "$GITHUB_OUTPUT" ;;
+            *)       echo "state=timeout" >> "$GITHUB_OUTPUT" ;;
+          esac
+
+          SLUG="$(printf %s "$BRANCH" | tr '/._' '---')"
+          echo "preview=https://${VERCEL_PROJECT}-git-${SLUG}-${VERCEL_SCOPE}.vercel.app" >> "$GITHUB_OUTPUT"
+          echo "baseline=https://${VERCEL_PROJECT}-git-develop-${VERCEL_SCOPE}.vercel.app" >> "$GITHUB_OUTPUT"
+
+      # ビルドが通らないと見た目は比べられない。黙って終わらず、依頼者に理由を伝える
+      - name: ビルドが通らなかったことを依頼に伝える
+        if: steps.preview.outputs.state != 'success'
+        env:
+          REPO: ${{ github.repository }}
+          NUMBER: ${{ inputs.issue_number }}
+          STATE: ${{ steps.preview.outputs.state }}
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -uo pipefail
+          if [ "$STATE" = "failure" ]; then
+            REASON="サイトの組み立て（ビルド）が通りませんでした。"
+          else
+            REASON="待ち時間の中でプレビューが用意できませんでした。"
+          fi
+          {
+            printf '%s\n' "## 自動チェックの結果"
+            printf '%s\n' ""
+            printf '%s\n' "❌ **$REASON**"
+            printf '%s\n' ""
+            printf '%s\n' "確認用 URL は作られていないため、見た目の比較もできていません。"
+            printf '%s\n' "この修正はこのままでは取り込めません。担当者にご連絡ください。"
+            printf '%s\n' ""
+            printf '%s\n' "[実行の記録]($RUN_URL)"
+          } > build-failed.md
+          gh issue comment "$NUMBER" --repo "$REPO" --body-file build-failed.md
+          exit 1
+
+      - name: 見た目を比べる
+        id: check
+        continue-on-error: true
+        env:
+          BASIC_AUTH_USER: ${{ secrets.BASIC_AUTH_USER }}
+          BASIC_AUTH_PASSWORD: ${{ secrets.BASIC_AUTH_PASSWORD }}
+        run: |
+          node .github/scripts/visual-check.mjs \
+            --preview "${{ steps.preview.outputs.preview }}" \
+            --baseline "${{ steps.preview.outputs.baseline }}" \
+            --build-status ok \
+            --lint-status ${{ steps.lint.outcome == 'success' && 'ok' || 'failed' }} \
+            ${{ steps.request.outputs.target && format('--target-path "{0}"', steps.request.outputs.target) || '' }} \
+            --out visual-check-out
+
+      - name: 差分の画像を残す
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: visual-check
+          path: visual-check-out
+          retention-days: 14
+          if-no-files-found: ignore
+
+      - name: 結果を依頼に書き込む
+        if: always()
+        env:
+          REPO: ${{ github.repository }}
+          NUMBER: ${{ inputs.issue_number }}
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -uo pipefail
+          if [ ! -f visual-check-out/summary.md ]; then
+            {
+              printf '%s\n' "## 自動チェックの結果"
+              printf '%s\n' ""
+              printf '%s\n' "⚠️ **検査を実行できませんでした。** 判定は出ていません。"
+              printf '%s\n' "取り込む前に、必ず人の目でご確認ください。"
+              printf '%s\n' ""
+              printf '%s\n' "[実行の記録]($RUN_URL)"
+            } > visual-check-fallback.md
+            gh issue comment "$NUMBER" --repo "$REPO" --body-file visual-check-fallback.md
+            exit 0
+          fi
+          gh issue comment "$NUMBER" --repo "$REPO" --body-file visual-check-out/summary.md
+
+      - name: 問題が見つかった場合はジョブを失敗させる
+        if: steps.check.outcome == 'failure' || steps.lint.outcome == 'failure'
+        run: |
+          echo "検査で問題が見つかりました。依頼への書き込みを確認してください。"
+          exit 1
