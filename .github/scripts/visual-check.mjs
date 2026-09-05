@@ -12,7 +12,8 @@
  *
  * 使い方:
  *   node visual-check.mjs --preview <URL> --baseline <URL> \
- *     [--target-path </works>] [--out <dir>]
+ *     [--target-path </works>] [--out <dir>] \
+ *     [--build-status ok|failed|unknown] [--lint-status ok|failed|unknown]
  * 環境変数:
  *   BASIC_AUTH_USER / BASIC_AUTH_PASSWORD … プレビューの合言葉（比較元にも必要）
  */
@@ -20,9 +21,10 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-import pixelmatch from "pixelmatch";
-import { PNG } from "pngjs";
 import { chromium } from "playwright";
+
+import { compare } from "./lib/compare.mjs";
+import { buildSummary, shouldFail } from "./lib/report.mjs";
 
 /** 見る場所。ここを増やすと検査は厚くなるが時間も伸びる */
 const TARGETS = [
@@ -32,9 +34,6 @@ const TARGETS = [
   { path: "/about", width: 1280, height: 800, label: "私たちについて" },
   { path: "/service", width: 1280, height: 800, label: "サービス" },
 ];
-
-/** これを超える差分は「依頼以外も動いた可能性」として警告する */
-const DIFF_WARN_PERCENT = 5;
 
 function parseArgs() {
   const args = process.argv.slice(2);
@@ -53,6 +52,12 @@ function parseArgs() {
     // 依頼が指していたページ。ここの変化は想定内、他ページの変化は要確認
     targetPath: get("target-path"),
     out: get("out") ?? "visual-check-out",
+    // ビルドと文法チェックの結果。依頼者が1つのコメントだけ読めば済むよう、
+    // 見た目の判定と同じ文章に混ぜて出す
+    checks: {
+      build: get("build-status"),
+      lint: get("lint-status"),
+    },
   };
 }
 
@@ -75,44 +80,8 @@ async function capture(context, url, target) {
   return { buffer, consoleErrors, status };
 }
 
-/**
- * 2枚を比べる。高さが違う場合は重なる範囲だけで比べ、
- * 高さの変化そのものも結果に含める（内容が増減した合図になるため）。
- */
-function compare(beforeBuffer, afterBuffer) {
-  const before = PNG.sync.read(beforeBuffer);
-  const after = PNG.sync.read(afterBuffer);
-
-  const width = Math.min(before.width, after.width);
-  const height = Math.min(before.height, after.height);
-  const heightChanged = before.height !== after.height;
-
-  const crop = (png) => {
-    if (png.width === width && png.height === height) return png;
-    const out = new PNG({ width, height });
-    PNG.bitblt(png, out, 0, 0, width, height, 0, 0);
-    return out;
-  };
-
-  const a = crop(before);
-  const b = crop(after);
-  const diff = new PNG({ width, height });
-  const changed = pixelmatch(a.data, b.data, diff.data, width, height, {
-    threshold: 0.1,
-  });
-
-  return {
-    changedPixels: changed,
-    percent: (changed / (width * height)) * 100,
-    heightChanged,
-    beforeHeight: before.height,
-    afterHeight: after.height,
-    diffImage: PNG.sync.write(diff),
-  };
-}
-
 async function main() {
-  const { preview, baseline, targetPath, out } = parseArgs();
+  const { preview, baseline, targetPath, out, checks } = parseArgs();
   await mkdir(out, { recursive: true });
 
   const user = process.env.BASIC_AUTH_USER;
@@ -136,6 +105,16 @@ async function main() {
         results.push({ target, error: `プレビューが ${after.status} を返しました` });
         continue;
       }
+      // 🔴 比較元も必ず確認する。ここを見ないと、比較元が 401 や 404 のときに
+      //    エラーページ同士・エラーページと正常ページを比べ、
+      //    「変化なし」や「余計な場所が変わった」という誤った判定を出してしまう。
+      if (before.status !== 200) {
+        results.push({
+          target,
+          error: `比較元（develop）が ${before.status} を返しました。差分は判定できません`,
+        });
+        continue;
+      }
 
       const diff = compare(before.buffer, after.buffer);
       await writeFile(path.join(out, `${name}-after.png`), after.buffer);
@@ -149,76 +128,11 @@ async function main() {
 
   await browser.close();
 
-  const summary = buildSummary(results, preview, targetPath);
+  const summary = buildSummary(results, preview, targetPath, checks);
   await writeFile(path.join(out, "summary.md"), summary, "utf-8");
   console.log(summary);
 
-  // 失敗とみなすのは「画面のエラー」と「検査そのものの失敗」だけ。
-  // 見た目の変化は依頼どおりでも大きく出るため、報告にとどめて止めない。
-  const hasProblem = results.some(
-    (r) => r.error || (r.consoleErrors?.length ?? 0) > 0,
-  );
-  process.exit(hasProblem ? 1 : 0);
-}
-
-function buildSummary(results, preview, targetPath) {
-  const isTarget = (r) => targetPath !== undefined && r.target.path === targetPath;
-
-  const lines = [
-    "## 自動チェックの結果",
-    "",
-    `**確認用 URL: ${preview}**`,
-    "（開くには合言葉が必要です。担当者にお尋ねください）",
-    "",
-    "比較元は `develop` のプレビューです。",
-    "",
-    "| 見た場所 | 依頼の対象 | 変化 | 画面のエラー |",
-    "|---|---|---|---|",
-  ];
-
-  for (const r of results) {
-    const scope = isTarget(r) ? "◯ 依頼した場所" : "—";
-    if (r.error) {
-      lines.push(`| ${r.target.label} | ${scope} | ⚠️ 確認できず | ${r.error} |`);
-      continue;
-    }
-    const pct = r.diff.percent;
-    const changed = pct > 0;
-    const height = r.diff.heightChanged
-      ? `・高さ ${r.diff.beforeHeight}→${r.diff.afterHeight}px`
-      : "";
-    const mark = changed ? `${pct.toFixed(2)}%${height}` : "変化なし";
-    const errors = r.consoleErrors.length === 0 ? "なし" : `⚠️ ${r.consoleErrors.length}件`;
-    lines.push(`| ${r.target.label} | ${scope} | ${mark} | ${errors} |`);
-  }
-
-  lines.push("");
-
-  const measured = results.filter((r) => !r.error);
-  const unexpected = measured.filter(
-    (r) => !isTarget(r) && r.diff.percent >= DIFF_WARN_PERCENT,
-  );
-  const untouched = measured.filter((r) => !isTarget(r) && r.diff.percent === 0);
-
-  if (unexpected.length > 0) {
-    lines.push(
-      `⚠️ **依頼していない場所が ${unexpected.length} か所変化しています。** ` +
-        `依頼の範囲を超えた変更が入っていないか、取り込む前にご確認ください。`,
-    );
-  } else if (untouched.length > 0) {
-    lines.push(
-      `依頼した場所以外の ${untouched.length} か所は**まったく変化していません**。` +
-        `依頼の範囲に収まっていると判断できます。`,
-    );
-  } else {
-    lines.push("依頼の範囲を超える変化は見つかりませんでした。");
-  }
-
-  const allErrors = results.flatMap((r) => r.consoleErrors ?? []);
-  if (allErrors.length > 0) {
-    lines.push("", "### 画面で発生したエラー", "", "```", ...allErrors.slice(0, 5), "```");
-  }
-  return lines.join("\n");
+  process.exit(shouldFail(results) ? 1 : 0);
 }
 
 main().catch((error) => {
