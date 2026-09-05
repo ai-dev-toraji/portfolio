@@ -4,16 +4,22 @@ type SectionTitleProps = {
   children: React.ReactNode;
   color?: SectionTitleColor;
   as?: "h1" | "h2";
+  size?: string;
 };
 
-export default function SectionTitle({ children, color = "primary", as: Tag = "h2" }: SectionTitleProps) {
+export default function SectionTitle({
+  children,
+  color = "primary",
+  as: Tag = "h2",
+  size = "text-4xl md:text-5xl",
+}: SectionTitleProps) {
   const colorClass: Record<SectionTitleColor, string> = {
     primary: "text-(--color-primary)",
     accent: "text-(--color-accent)",
   };
 
   return (
-    <Tag className={`text-center ${colorClass[color]} text-4xl md:text-5xl font-black tracking-[0.1em] mb-16`}>
+    <Tag className={`text-center ${colorClass[color]} ${size} font-black tracking-[0.1em] mb-16`}>
       {children}
     </Tag>
   );

@@ -13,7 +13,7 @@ export default async function Works() {
   return (
     <section id="works" className="bg-(--color-primary) py-20 md:py-28">
       <div className="max-w-6xl mx-auto px-6">
-        <SectionTitle color="accent">WORKS</SectionTitle>
+        <SectionTitle color="accent" size="text-5xl md:text-6xl">WORKS</SectionTitle>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
           {worksList.contents.map((work) => (
