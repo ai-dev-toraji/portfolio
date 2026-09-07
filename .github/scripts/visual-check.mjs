@@ -88,11 +88,20 @@ async function main() {
   const password = process.env.BASIC_AUTH_PASSWORD;
 
   const browser = await chromium.launch();
-  const results = await captureAll(browser, { preview, baseline, out, user, password }).finally(
-    // 🔴 どんな終わり方でも必ず閉じる。開いたままだと node が終われず、
-    //    ジョブは失敗せずに制限時間まで回り続ける（20分の空回り）。
-    () => browser.close(),
-  );
+  // 🔴 .finally(() => browser.close()) は使わない。
+  //    Promise.prototype.finally は、渡した処理自体が失敗すると、
+  //    元の結果が成功していてもその失敗で上書きしてしまう。
+  //    撮影がすべて成功したのに閉じる操作だけが失敗した場合、
+  //    せっかく撮れた結果を検査ではなく実行時エラーとして捨てることになる。
+  //    try/finally なら、閉じる操作の失敗は無視して結果を残せる。
+  let results;
+  try {
+    results = await captureAll(browser, { preview, baseline, out, user, password });
+  } finally {
+    // 開いたままだと node が終われず、ジョブは失敗せずに制限時間まで回り続ける
+    // （20分の空回り）。閉じるのに失敗しても、それ自体で検査結果を潰さない。
+    await browser.close().catch(() => {});
+  }
 
   // 判定は1回だけ出し、依頼への文面と機械が読む出力の両方で同じものを使う。
   // 2回計算すると、片方だけ条件が変わったときに両者が食い違う。

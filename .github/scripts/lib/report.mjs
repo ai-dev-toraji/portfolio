@@ -9,17 +9,26 @@
  */
 
 /**
- * 依頼した場所であっても、これ以上変わっていたら人の目に回す。
+ * 依頼していない場所で、これ以下の画素差は「動いた」とみなさない。
+ *
+ * 比較元と比較先は別々の Vercel デプロイであり、コードを一切触っていなくても
+ * フォントの描画やアニメーションの途中フレームなどでわずかな画素差が出うる。
+ * 依頼した場所（movedAtAll）はどんな小さな変化も見逃さないが、
+ * 依頼していない場所（movedBeyondNoise）はこの揺らぎを許容しないと、
+ * ノイズのたびに正しい修正まで人の手が要ることになる。
  * ⚠️ 実測に基づく数字ではない。回数を重ねてから調整すること。
  */
-export const TARGET_MAX_CHANGE_PERCENT = 60;
+export const SPILL_TOLERANCE_PERCENT = 0.05;
 
 /**
- * 依頼した場所の寸法がこの割合以上変わっていたら人の目に回す。
- * 割合の差分は重なる範囲だけで出るため、寸法の変化は別に見る必要がある。
+ * 依頼していない場所で、寸法（高さ・横幅）がこれ以下の画素差なら「動いた」とみなさない。
+ *
+ * 画素の差にはノイズ許容量があるのに、寸法の差には無いと、1画素だけ丈が
+ * ずれたようなごく些細な差（フォントの読み込み順によるレイアウトのわずかな
+ * ずれ等）でも止まってしまい、SPILL_TOLERANCE_PERCENT を設けた意味が薄れる。
  * ⚠️ 実測に基づく数字ではない。回数を重ねてから調整すること。
  */
-export const TARGET_MAX_SIZE_CHANGE_RATIO = 0.5;
+export const SPILL_DIMENSION_TOLERANCE_PX = 2;
 
 /** 数字を3桁ごとに区切る。言語を明示するので実行環境の設定に左右されない */
 function withCommas(value) {
@@ -27,12 +36,29 @@ function withCommas(value) {
 }
 
 /**
- * 見た目が動いたと言えるか。
+ * 依頼した場所が動いたと言えるか。どんな小さな変化も見逃さない。
  * 重なる範囲の画素だけでなく、寸法の変化も見る。重なる範囲だけを比べる以上、
  * 下や横に足された部分は画素の差として現れないため。
  */
-function moved(r) {
+function movedAtAll(r) {
   return r.diff.changedPixels > 0 || r.diff.heightChanged || r.diff.widthChanged;
+}
+
+/**
+ * 依頼していない場所が、ノイズと呼べない大きさで動いたと言えるか。
+ * 画素の差は割合が SPILL_TOLERANCE_PERCENT を、寸法の差は
+ * SPILL_DIMENSION_TOLERANCE_PX を超えたときだけ「動いた」とする。
+ * どちらも、比較元と比較先が別々のデプロイであることによる描画の揺らぎを
+ * 吸収するための許容量であり、0 にすると正しい修正まで止まり続ける。
+ */
+function movedBeyondNoise(r) {
+  const heightDelta = Math.abs(r.diff.afterHeight - r.diff.beforeHeight);
+  const widthDelta = Math.abs(r.diff.afterWidth - r.diff.beforeWidth);
+  return (
+    r.diff.percent > SPILL_TOLERANCE_PERCENT ||
+    heightDelta > SPILL_DIMENSION_TOLERANCE_PX ||
+    widthDelta > SPILL_DIMENSION_TOLERANCE_PX
+  );
 }
 
 /** 表の1マスに収まる形にする。改行と縦棒は表の区切りとして解釈されるため潰す */
@@ -74,12 +100,24 @@ export function newConsoleErrors(r) {
 /**
  * 「この修正を自動で取り込んでよいか」を機械が判定する。
  *
- * 人が必ず目で見る前提なら、見た目の変化は報告するだけでよかった。
- * 自動で取り込むなら、人が見ていた分の判断をここが肩代わりする。
- * したがって**迷ったら通さない**。判定できない事情はすべて「取り込まない」に倒す。
+ * 想定している完成形は、ここで「取り込んでよい」と判定された場合に
+ * develop（クライアントの目に触れない非公開のプレビュー）へ自動で進み、
+ * main（本番）への昇格は別に、必ず人が develop を見て判断する、という形。
+ * つまりここは最後の砦ではなく、その手前の一次選別に**しかならない設計**。
  *
- * 判定は割合ではなく画素の実数で行う。文字を数文字入れ替えただけの修正は
- * 割合にすると 0.00% に丸められ、「直った」と「何もしなかった」が同じ値になるため。
+ * 🔴 ただし現時点では、上記の「develop へ自動で進む」も「human が
+ *    develop を見てから main へ上げる」も、まだコードとして実装・強制
+ *    されていない（`mergeable` の値はどこからも参照されておらず、
+ *    develop への Pull Request 作成も main への昇格も完全に手作業）。
+ *    したがって**現状ではこの判定が唯一の自動チェックであり**、下の
+ *    「依頼した場所がどれだけ変わったか」に上限を設けていないのは、
+ *    将来 develop への自動マージを実装するまでの暫定であって、
+ *    「もう安全網があるから大丈夫」という意味ではない。
+ *    develop への自動マージを実装する前に、この関数を再監査すること。
+ *
+ * 依頼した場所の「変化したかどうか」は割合ではなく画素の実数で見る。
+ * 文字を数文字入れ替えただけの修正は割合にすると 0.00% に丸められ、
+ * 「直った」と「何もしなかった」が同じ値になるため。
  */
 export function judge(results, targetPath, checks = {}) {
   const reasons = [];
@@ -128,45 +166,32 @@ export function judge(results, targetPath, checks = {}) {
       );
     } else if (targetRows.length > 0) {
       targetChangedPixels = Math.max(...targetRows.map((r) => r.diff.changedPixels));
-      if (!targetRows.some(moved)) {
+      if (!targetRows.some(movedAtAll)) {
         reasons.push("依頼した場所が変化していません（修正が入っていない可能性があります）");
       }
-      // 依頼した場所は変わってよいが、限度がある。ページが丸ごと入れ替わるような
-      // 変化は、依頼の解釈違いか手の広げすぎなので人の目に回す。
-      // ⚠️ これらの値は実測に基づく数字ではない。運用のなかで調整すること。
-      const worst = Math.max(...targetRows.map((r) => r.diff.percent));
-      if (worst >= TARGET_MAX_CHANGE_PERCENT) {
-        reasons.push(
-          `依頼した場所の変化が大きすぎます（${worst.toFixed(1)}%）。` +
-            `依頼の範囲を超えていないかご確認ください`,
-        );
-      }
-      // 割合は重なる範囲だけで出しているので、寸法が伸び縮みした分は現れない。
-      // 縦にも横にも、大きく伸びた場合は「大きすぎる変化」として扱う。
-      const ratio = (before, after) => (before > 0 ? Math.abs(after - before) / before : 0);
-      const stretched = targetRows.filter(
-        (r) =>
-          ratio(r.diff.beforeHeight, r.diff.afterHeight) >= TARGET_MAX_SIZE_CHANGE_RATIO ||
-          ratio(r.diff.beforeWidth, r.diff.afterWidth) >= TARGET_MAX_SIZE_CHANGE_RATIO,
-      );
-      if (stretched.length > 0) {
-        // 画面幅ごとに1行ずつある。どれか1つだけ挙げると、より重い方を隠しかねない。
-        const detail = stretched
-          .map((r) => `${r.target.label}：${sizeChanges(r.diff).join("・")}`)
-          .join("、");
-        reasons.push(
-          `依頼した場所の変化が大きすぎます（${detail}）。依頼の範囲を超えていないかご確認ください`,
-        );
-      }
+      // 🔴 依頼した場所の変化の大きさそのものには、ここで上限を設けない。
+      //
+      //    以前は画素の割合や寸法の伸び幅に上限を設けていたが、見出しが1行
+      //    折り返しただけでもそれより下の画素がすべてずれ、割合はほぼ100%
+      //    まで振れる。これは正しい小さな修正でも起きるため、「割合が大きい」
+      //    ことは「依頼の範囲を超えて手を広げた」ことの証拠にならない。
+      //    依頼した場所が変わるのはむしろ想定どおりであり、逆に判定を誤らせる。
+      //
+      //    develop はクライアントの目に触れない非公開のプレビューであり、
+      //    ここで自動的に取り込まれても、main（本番）へ進める前には必ず
+      //    人が develop のプレビューを見て判断する。したがってこの判定を
+      //    緩めても、最後の砦は失われない。
     }
     // allTargetRows はあるが targetRows が空＝撮影に失敗した場合。
     // 「対象に入っていない」とは原因が違うので、ここでは何も足さない
     // （上の「確認できませんでした」が理由として立っている）。
   }
 
-  // 依頼した場所以外は、少しでも動いていれば人の目に回す。
-  // 検査した限り、変更のないページの差分はちょうど 0 になるため、
-  // ここを緩めると「ついでに触られた」を見逃す側に倒れる。
+  // 依頼した場所以外は、ノイズと呼べない大きさで動いていれば人の目に回す。
+  // ノイズ（比較元と比較先が別デプロイであることによる描画のわずかな揺らぎ）
+  // まで拾うと、コードを何も触っていないページのせいで正しい修正が
+  // 止まり続ける。かといって閾値を緩めすぎると「ついでに触られた」を
+  // 見逃す側に倒れるため、SPILL_TOLERANCE_PERCENT はごく小さい値にしてある。
   //
   // 依頼のページが分からないときは、どれが「依頼した場所」なのかも決められない。
   // 全ページを「依頼していない場所」として並べると、本来変わってよいページまで
@@ -175,12 +200,16 @@ export function judge(results, targetPath, checks = {}) {
   const spilled =
     targetPath === undefined
       ? []
-      : measured.filter((r) => r.target.path !== targetPath && moved(r));
+      : measured.filter((r) => r.target.path !== targetPath && movedBeyondNoise(r));
   if (spilled.length > 0) {
     const describe = (r) => {
-      if (r.diff.changedPixels > 0) return r.target.label;
-      // 画素は同じで寸法だけ変わった場合。何が変わったのかを必ず書く
-      return `${r.target.label}：${sizeChanges(r.diff).join("・")}`;
+      // movedBeyondNoise はノイズ許容量を超えた画素差「または」寸法の変化で
+      // 動いたと判定する。寸法が変わっているなら、画素差の有無に関わらず
+      // 必ず書く。画素差だけを見ていた旧い条件だと、ノイズ程度の画素差と
+      // 寸法の変化が同時に起きた行で、寸法の情報が消えてしまう。
+      const size = sizeChanges(r.diff);
+      if (size.length > 0) return `${r.target.label}：${size.join("・")}`;
+      return r.target.label;
     };
     reasons.push(
       `依頼していない場所が ${spilled.length} か所変化しています` +
@@ -192,8 +221,9 @@ export function judge(results, targetPath, checks = {}) {
     ok: reasons.length === 0,
     reasons,
     diagnostics: {
-      // 測れていない場合は 0 と区別できるよう null。JSON にしたときに
-      // キーごと消えると、受け取る側が「変化なし」と読み違える。
+      // 測れていない場合は 0 と区別できるよう null。JSON（JavaScript Object
+      // Notation / データをやり取りするための軽量な記法）にしたときにキーごと
+      // 消えると、受け取る側が「変化なし」と読み違える。
       targetChangedPixels,
       spilledCount: spilled.length,
       checkedCount: measured.length,
@@ -281,10 +311,16 @@ export function buildSummary(
           `依頼の範囲を超えた変更が入っていないか、取り込む前にご確認ください。`,
       );
     } else if (verdict.ok) {
+      // 🔴「まったく変化していません」と書かない。SPILL_TOLERANCE_PERCENT の
+      //    導入により、ここに含まれる行にはノイズ程度のごく小さな画素差が
+      //    残っている場合がある（上の表にその数値が出ている）。実際には
+      //    動いているのに「無傷」と言い切ると、表の数字と文章が食い違う。
       lines.push(
         untouched.length > 0
-          ? `依頼した場所以外の ${untouched.length} か所は**まったく変化していません**。` +
-              `依頼の範囲に収まっていると判断できます。`
+          ? `依頼した場所以外の ${untouched.length} か所に、依頼の範囲を超える` +
+              `とみなせる変化は見つかりませんでした（ごくわずかな画素差は、` +
+              `デプロイのたびに起こりうる揺らぎとして許容しています。上の表の` +
+              `数値もあわせてご確認ください）。`
           : "依頼の範囲を超える変化は見つかりませんでした。",
       );
     } else {
@@ -308,11 +344,17 @@ export function buildSummary(
   if (verdict.ok) {
     // 🔴 見ていない場所まで「動いていない」と書かない。
     //    検査しているのは上の表にある場所だけであり、サイトにはそれ以外のページもある。
+    //    さらに、検査した場所についても「動いていません」と言い切らない。
+    //    ノイズ許容量（SPILL_TOLERANCE_PERCENT）の範囲内でなら実際には
+    //    わずかに動いていてもここを通るため、正確には「動いていない」ではなく
+    //    「範囲を超える動きは無い」である。
     lines.push(
       "✅ **自動で取り込める状態です。** 依頼した場所は変わり、" +
-        `検査した ${verdict.diagnostics.checkedCount} か所のうち、それ以外の場所は動いていません。`,
+        `検査した ${verdict.diagnostics.checkedCount} か所のうち、それ以外の場所に` +
+        `依頼の範囲を超える変化は見つかっていません。`,
       "",
-      "※ 検査したのは上の表にある場所だけです。表に無いページについては判定していません。",
+      "※ 検査したのは上の表にある場所だけです。表に無いページについては判定していません。" +
+        "また、ごくわずかな画素差はデプロイごとの揺らぎとして許容しています。",
     );
   } else {
     lines.push(

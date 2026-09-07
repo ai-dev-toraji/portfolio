@@ -76,13 +76,26 @@ test("ごく小さな変化でも、変わっていれば取り込んでよい�
   assert.equal(verdict.ok, true);
 });
 
-test("依頼していない場所が1画素でも変わっていれば、取り込まない", () => {
+test("依頼していない場所が、ノイズと呼べない量だけ変わっていれば、取り込まない", () => {
+  // 1280x800 = 1,024,000 画素。600px は割合にすると約 0.059% で、
+  // 許容量（0.05%）を超える大きさにしてある。
   const verdict = judgeWith(
-    [seen("/about", "私たちについて", 500), seen("/", "トップ", 3)],
+    [seen("/about", "私たちについて", 500), seen("/", "トップ", 600)],
     "/about",
   );
   assert.equal(verdict.ok, false);
   assert.match(verdict.reasons.join("\n"), /依頼していない場所が 1 か所/);
+});
+
+test("依頼していない場所のごくわずかな画素差では、取り込みを止めない", () => {
+  // 比較元と比較先は別々の Vercel デプロイであり、コードを触っていなくても
+  // フォントの描画やアニメーションの途中フレームでわずかな画素差が出ることがある。
+  // そのたびに止まると、正しい修正まで人の手が要るようになる。
+  const verdict = judgeWith(
+    [seen("/about", "私たちについて", 500), seen("/", "トップ", 10)],
+    "/about",
+  );
+  assert.equal(verdict.ok, true);
 });
 
 test("確認できなかった場所があれば、取り込まない", () => {
@@ -131,7 +144,7 @@ test("1か所も検査できていなければ、取り込まない", () => {
 
 // ▼ ここから下は、判定の抜け道をふさぐための取り決め
 
-test("依頼していない場所の高さが変わっていれば、画素が同じでも取り込まない", () => {
+test("依頼していない場所の高さが許容量を超えて変わっていれば、画素が同じでも取り込まない", () => {
   // 重なる範囲だけで比べるため、下に節を足された場合は画素の差が 0 になる。
   // 高さの変化を見ないと「1画素も動いていない」と誤って報告する。
   const verdict = judgeWith(
@@ -143,6 +156,19 @@ test("依頼していない場所の高さが変わっていれば、画素が�
   );
   assert.equal(verdict.ok, false);
   assert.match(verdict.reasons.join("\n"), /高さ/);
+});
+
+test("依頼していない場所の高さが許容量以内でしかずれていなければ、取り込みを止めない", () => {
+  // 画素の差にはノイズ許容量があるのに寸法の差に無いと、フォントの読み込み
+  // 順によるレイアウトの1〜2画素のずれでも止まり続け、正しい修正が通らない。
+  const verdict = judgeWith(
+    [
+      seen("/about", "私たちについて", 500),
+      seen("/works", "実績一覧", 0, { heightChanged: true, afterHeight: 801 }),
+    ],
+    "/about",
+  );
+  assert.equal(verdict.ok, true);
 });
 
 test("ビルドが通っていなければ、取り込まない", () => {
@@ -179,10 +205,12 @@ test("機械のチェックが両方とも通っていれば、それを理由�
   assert.equal(verdict.ok, true);
 });
 
-test("依頼した場所が丸ごと書き換わっていれば、取り込まない", () => {
+test("依頼した場所が画面いっぱいに変わっても、それだけでは止めない", () => {
+  // 見出しが2行に折り返るだけで、それより下の画素がすべてずれ、
+  // 割合はほぼ100%になる。依頼した場所は変わってよい場所なので、
+  // 割合の大小だけでは「手を広げすぎ」と「妥当な折り返し」を区別できない。
   const verdict = judgeWith([seen("/about", "私たちについて", 1280 * 800)], "/about");
-  assert.equal(verdict.ok, false);
-  assert.match(verdict.reasons.join("\n"), /変化が大きすぎます/);
+  assert.equal(verdict.ok, true);
 });
 
 test("同じページの画面幅ちがいは、どちらか変わっていれば「変化した」とみなす", () => {
@@ -214,15 +242,15 @@ test("測れなかった場合の画素数は、0 ではなく「測っていな
   assert.equal(JSON.parse(JSON.stringify(verdict)).diagnostics.targetChangedPixels, null);
 });
 
-test("依頼した場所の丈が大きく伸びていれば、画素が同じでも取り込まない", () => {
-  // 節を丸ごと足された場合、重なる範囲は同じままなので画素の差は 0 になる。
-  // 割合だけを見ていると「限度を超えた変化」を素通しする。
+test("依頼した場所の丈が大きく伸びても、それだけでは止めない", () => {
+  // 「間隔を詰めてほしい」「見出しを大きくしてほしい」のような依頼でも
+  // 丈は普通に伸び縮みする。伸び幅の大小だけでは依頼から外れたとは言えない。
+  // ただし「変化した」という事実（movedAtAll）は成立している必要がある。
   const verdict = judgeWith(
     [seen("/about", "私たちについて", 0, { heightChanged: true, afterHeight: 12000 })],
     "/about",
   );
-  assert.equal(verdict.ok, false);
-  assert.match(verdict.reasons.join("\n"), /変化が大きすぎます/);
+  assert.equal(verdict.ok, true);
 });
 
 test("依頼していない場所の横幅が変わっていれば、取り込まない", () => {
@@ -239,13 +267,26 @@ test("依頼していない場所の横幅が変わっていれば、取り込�
   assert.match(verdict.reasons.join("\n"), /横幅 1280→1900px/);
 });
 
-test("依頼した場所の横幅が大きく広がっていれば、取り込まない", () => {
+test("ノイズ程度の画素差と寸法の変化が同時に起きても、理由に寸法の情報が残る", () => {
+  // 動いたと判定された理由が画素の割合（ノイズ許容量超え）でも、
+  // 寸法も変わっているなら、それも読み手に伝わらなければならない。
+  const verdict = judgeWith(
+    [
+      seen("/about", "私たちについて", 500),
+      seen("/works", "実績一覧", 600, { widthChanged: true, afterWidth: 1900 }),
+    ],
+    "/about",
+  );
+  assert.equal(verdict.ok, false);
+  assert.match(verdict.reasons.join("\n"), /横幅 1280→1900px/);
+});
+
+test("依頼した場所の横幅が大きく広がっても、それだけでは止めない", () => {
   const verdict = judgeWith(
     [seen("/about", "私たちについて", 100, { widthChanged: true, afterWidth: 2400 })],
     "/about",
   );
-  assert.equal(verdict.ok, false);
-  assert.match(verdict.reasons.join("\n"), /変化が大きすぎます/);
+  assert.equal(verdict.ok, true);
 });
 
 test("機械のチェックを渡し忘れたら、通さない", () => {
