@@ -5,18 +5,35 @@ import { buildSummary } from "../lib/report.mjs";
 
 const PREVIEW = "https://example.vercel.app";
 
-/** 検査できたページ1件分 */
-const ok = (path, label, percent, { consoleErrors = [] } = {}) => ({
+/**
+ * 検査できたページ1件分。
+ * changedPixels は既定では割合から逆算する。割合では 0.00% に丸められてしまう
+ * ごく小さな変化を作りたい場合のために、直接指定もできるようにしている。
+ */
+const ok = (path, label, percent, { consoleErrors = [], changedPixels } = {}) => ({
   target: { path, label, width: 1280, height: 800 },
+  // compare() が返す形と同じキーをすべて持たせる。
+  // 一部を省くと、compare() 側でキー名を変えてもテストが緑のままになる。
   diff: {
     percent,
     heightChanged: false,
     beforeHeight: 800,
     afterHeight: 800,
-    changedPixels: Math.round(percent * 100),
+    widthChanged: false,
+    beforeWidth: 1280,
+    afterWidth: 1280,
+    changedPixels: changedPixels ?? Math.round(percent * 100),
   },
   consoleErrors,
 });
+
+/**
+ * 機械のチェックは「通った」を既定にする。
+ * 渡さないと判定は通らない（渡し忘れを合格と読まないため）。
+ */
+const OK_CHECKS = { build: "ok", lint: "ok" };
+const summaryOf = (results, targetPath, checks = OK_CHECKS) =>
+  buildSummary(results, PREVIEW, targetPath, checks);
 
 /** 検査できなかったページ1件分 */
 const ng = (path, label, error) => ({
@@ -44,17 +61,15 @@ test("依頼していない場所が大きく変化したら警告する", () =>
 });
 
 test("依頼した場所の変化は警告の対象にしない", () => {
-  const md = buildSummary([ok("/", "トップ", 40), ok("/works", "実績一覧", 0)], PREVIEW, "/");
+  const md = summaryOf([ok("/", "トップ", 40), ok("/works", "実績一覧", 0)], "/");
   assert.doesNotMatch(md, /依頼していない場所が/);
   assert.match(md, /まったく変化していません/);
 });
 
 test("依頼以外がすべて無変化なら、範囲に収まっていると伝える", () => {
-  const md = buildSummary([ok("/", "トップ", 3), ok("/works", "実績一覧", 0)], PREVIEW, "/");
+  const md = summaryOf([ok("/", "トップ", 3), ok("/works", "実績一覧", 0)], "/");
   assert.match(md, /1 か所は\*\*まったく変化していません\*\*/);
 });
-
-// ▼ ここから下は、現状の実装では通らないはず（＝直すべき欠陥）
 
 test("どの場所も確認できなかったときに『問題なし』と言ってはいけない", () => {
   const md = buildSummary(
@@ -109,4 +124,77 @@ test("機械チェックが確認できなかった場合は、通ったとは�
   const md = buildSummary([ok("/", "トップ", 0)], PREVIEW, "/", { build: "unknown" });
   assert.match(md, /⚠️ 確認できず/);
   assert.doesNotMatch(md, /ビルド（サイトが組み上がるか） \| ✅/);
+});
+
+test("ごく小さな変化を『0.00%』とだけ書かない（変化なしと区別できること）", () => {
+  // 2文字の差し替えは数十画素しか動かず、割合にすると 0.00% に丸められる。
+  // 表示がそれだけだと、直った場合と何もしなかった場合が同じ見え方になる。
+  const md = buildSummary(
+    [ok("/about", "私たちについて", 0.0039, { changedPixels: 40 })],
+    PREVIEW,
+    "/about",
+  );
+  // 表のその欄が実際にどう出るかまで見る。数字がどこかにあるだけでは、
+  // 表示が元に戻っていても気づけない。
+  assert.match(md, /\| 40画素（0\.00%）\s*\|/);
+  assert.doesNotMatch(md, /\| 変化なし \|/);
+});
+
+test("本当に変化がない場所は『変化なし』と書く", () => {
+  const md = buildSummary([ok("/", "トップ", 0)], PREVIEW, "/about");
+  assert.match(md, /変化なし/);
+});
+
+test("取り込んでよいかどうかが、まとめに書かれる", () => {
+  const md = summaryOf(
+    [ok("/about", "私たちについて", 1, { changedPixels: 40 }), ok("/", "トップ", 0)],
+    "/about",
+  );
+  assert.match(md, /自動で取り込め(る|ます)/);
+});
+
+test("取り込めない場合は、その理由がまとめに書かれる", () => {
+  const md = buildSummary(
+    [ok("/about", "私たちについて", 0), ok("/", "トップ", 0)],
+    PREVIEW,
+    "/about",
+  );
+  assert.match(md, /依頼した場所が変化していません/);
+});
+
+test("まとめに出る件数と、判定が挙げる件数を食い違わせない", () => {
+  // 別々の基準で数えると、同じコメントの中に「1 か所」と「2 か所」が並ぶ。
+  const md = buildSummary(
+    [
+      ok("/about", "私たちについて", 1, { changedPixels: 5000 }),
+      ok("/", "トップ", 6),
+      ok("/works", "実績一覧", 2),
+    ],
+    PREVIEW,
+    "/about",
+  );
+  const counts = [...md.matchAll(/依頼していない場所が (\d+) か所/g)].map((m) => m[1]);
+  assert.ok(counts.length >= 2, "まとめと判定の両方に件数が出ること");
+  assert.equal(new Set(counts).size, 1, `件数が食い違っている: ${counts.join(" / ")}`);
+});
+
+test("取り込めない判定のときも、見た目の節に結論を必ず書く", () => {
+  // 依頼した場所が無変化、依頼外がごく小さく変化（どの警告条件にも当たらない）
+  const md = buildSummary(
+    [ok("/about", "私たちについて", 0), ok("/", "トップ", 0.002, { changedPixels: 20 })],
+    PREVIEW,
+    "/about",
+  );
+  const visual = md.split("### 取り込みの可否")[0];
+  assert.match(visual, /取り込めません|変化しています/);
+});
+
+test("取り込めない判定のときに、安心させる文を並べない", () => {
+  const md = buildSummary(
+    [ok("/about", "私たちについて", 0), ok("/", "トップ", 0)],
+    PREVIEW,
+    "/about",
+  );
+  assert.doesNotMatch(md, /収まっていると判断できます/);
+  assert.doesNotMatch(md, /見つかりませんでした/);
 });

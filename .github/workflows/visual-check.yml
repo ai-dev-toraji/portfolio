@@ -29,6 +29,12 @@ on:
         description: "結果を書き込む依頼の番号"
         required: true
         type: string
+    # 🔴 呼び出し元が自動で取り込んでよいかを判断するための唯一の値。
+    #    ここを宣言しないと、ジョブ側で outputs を書いても呼び出し元には届かない。
+    outputs:
+      mergeable:
+        description: "自動で取り込んでよいと判定されたか（true / それ以外）"
+        value: ${{ jobs.check.outputs.mergeable }}
   # 手で試せるようにしておく（原因調べのときに要る）
   workflow_dispatch:
     inputs:
@@ -49,6 +55,12 @@ jobs:
   check:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    # 🔴 自動で取り込んでよいかは、この出力だけで判断すること。
+    #    ジョブの成否（緑か赤か）で判断してはいけない。ジョブは画面のエラーと
+    #    検査そのものの失敗でしか赤くならず、「AI が何もしなかった」「依頼外の
+    #    ページが動いた」では緑のままになる。
+    outputs:
+      mergeable: ${{ steps.check.outputs.mergeable }}
     permissions:
       contents: read
       issues: write
@@ -75,9 +87,26 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -uo pipefail
-          # 依頼の本文から、対象ページのパスを取る（表の「ページ」行）
+          # 依頼の本文から、対象ページのパスを取る（「## 該当箇所」の表の「ページ」行）
+          #
+          # 🔴 本文全体から拾ってはいけない。依頼者が書いたメモは表より前に置かれ、
+          #    そこに同じ形の行を書かれると、そちらが先に一致してしまう
+          #    （本来のページの代わりに、依頼者が指定した値が使われる）。
+          #    見出し「## 該当箇所」より後ろだけを見る。
           BODY="$(gh issue view "$NUMBER" --repo "$REPO" --json body --jq '.body' 2>/dev/null)"
-          TARGET="$(printf %s "$BODY" | sed -n 's/^| ページ | `\(.*\)` |$/\1/p' | head -1)"
+          SECTION="$(printf %s "$BODY" | sed -n '/^## 該当箇所$/,$p')"
+          TARGET="$(printf %s "$SECTION" | sed -n 's/^| ページ | `\(.*\)` |$/\1/p' | head -1)"
+
+          # 🔴 ここで取り出す値は依頼者が書いたものである。
+          #    サイト内のパスの形をしていないものは、後続へ渡さず捨てる。
+          #    捨てた場合は「対象ページ不明」となり、取り込みの可否判定は通らなくなる。
+          if [ -n "$TARGET" ] &&
+            { ! printf %s "$TARGET" | grep -Eq '^/[A-Za-z0-9/_.~%-]*$' ||
+              printf %s "$TARGET" | grep -q '\.\.'; }; then
+            echo "対象ページの形が不正なため無視します"
+            TARGET=""
+          fi
+
           echo "対象ページ: ${TARGET:-（取得できず）}"
           echo "target=$TARGET" >> "$GITHUB_OUTPUT"
 
@@ -93,12 +122,19 @@ jobs:
         working-directory: .github/scripts
         run: npm test
 
+      # 依存の用意と文法チェックは分ける。同じ手順にすると、npm の取得が
+      # 一時的に失敗しただけでも「文法チェックが通らなかった」と依頼者に伝わり、
+      # AI の書いたコードのせいにしてしまう。
+      - name: サイト本体の依存を用意する
+        id: deps
+        continue-on-error: true
+        run: npm ci
+
       - name: 文法チェック
         id: lint
+        if: steps.deps.outcome == 'success'
         continue-on-error: true
-        run: |
-          npm ci
-          npm run lint
+        run: npm run lint
 
       - name: Vercel のプレビューができるまで待つ
         id: preview
@@ -133,6 +169,7 @@ jobs:
 
       # ビルドが通らないと見た目は比べられない。黙って終わらず、依頼者に理由を伝える
       - name: ビルドが通らなかったことを依頼に伝える
+        id: build_failed
         if: steps.preview.outputs.state != 'success'
         env:
           REPO: ${{ github.repository }}
@@ -160,20 +197,42 @@ jobs:
           gh issue comment "$NUMBER" --repo "$REPO" --body-file build-failed.md
           exit 1
 
+      # 🔴 依頼者が書いた文字列を ${{ }} で run: の中に展開しない。
+      #    展開はシェルが読む前の文字列置換なので、`$(...)` を書かれると
+      #    そのままコマンドとして実行される。この手順には合言葉が渡っているため、
+      #    それを外部へ送り出すことができてしまう。
+      #    値は必ず env 経由で渡し、シェル変数として引用符付きで使う。
       - name: 見た目を比べる
         id: check
         continue-on-error: true
         env:
           BASIC_AUTH_USER: ${{ secrets.BASIC_AUTH_USER }}
           BASIC_AUTH_PASSWORD: ${{ secrets.BASIC_AUTH_PASSWORD }}
+          PREVIEW_URL: ${{ steps.preview.outputs.preview }}
+          BASELINE_URL: ${{ steps.preview.outputs.baseline }}
+          TARGET_PATH: ${{ steps.request.outputs.target }}
+          # ビルドの可否は Vercel の結果をそのまま使う。この処理自身はビルドしない。
+          # なお上の手順で success 以外なら止まるため、実際は常に ok になる。
+          # それでも値として渡すのは、上の手順を外したときに黙って「合格」に
+          # なってしまわないようにするため。
+          BUILD_STATUS: ${{ steps.preview.outputs.state == 'success' && 'ok' || 'unknown' }}
+          # 実行できなかった場合は failed ではなく unknown。落ち度の所在が変わる。
+          # 🔴 1行で書く。折りたたみ記法（>-）は、続きの行を深く字下げすると
+          #    改行がそのまま残り、式が壊れる。
+          LINT_STATUS: ${{ steps.lint.outcome == 'success' && 'ok' || steps.lint.outcome == 'failure' && 'failed' || 'unknown' }}
         run: |
-          node .github/scripts/visual-check.mjs \
-            --preview "${{ steps.preview.outputs.preview }}" \
-            --baseline "${{ steps.preview.outputs.baseline }}" \
-            --build-status ok \
-            --lint-status ${{ steps.lint.outcome == 'success' && 'ok' || 'failed' }} \
-            ${{ steps.request.outputs.target && format('--target-path "{0}"', steps.request.outputs.target) || '' }} \
+          set -uo pipefail
+          ARGS=(
+            --preview "$PREVIEW_URL"
+            --baseline "$BASELINE_URL"
+            --build-status "$BUILD_STATUS"
+            --lint-status "$LINT_STATUS"
             --out visual-check-out
+          )
+          if [ -n "$TARGET_PATH" ]; then
+            ARGS+=(--target-path "$TARGET_PATH")
+          fi
+          node .github/scripts/visual-check.mjs "${ARGS[@]}"
 
       - name: 差分の画像を残す
         if: always()
@@ -184,8 +243,10 @@ jobs:
           retention-days: 14
           if-no-files-found: ignore
 
+      # ビルドが通らなかった場合は、上の手順がすでに理由を伝えている。
+      # ここでも書くと、1つの失敗に対して食い違う説明が2つ並ぶ。
       - name: 結果を依頼に書き込む
-        if: always()
+        if: always() && steps.build_failed.conclusion == 'skipped'
         env:
           REPO: ${{ github.repository }}
           NUMBER: ${{ inputs.issue_number }}
