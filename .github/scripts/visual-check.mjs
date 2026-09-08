@@ -18,13 +18,13 @@
  *   BASIC_AUTH_USER / BASIC_AUTH_PASSWORD … プレビューの合言葉（比較元にも必要）
  */
 
-import { mkdir, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { chromium } from "playwright";
 
 import { compare } from "./lib/compare.mjs";
-import { buildSummary, shouldFail } from "./lib/report.mjs";
+import { buildSummary, judge, shouldFail } from "./lib/report.mjs";
 
 /** 見る場所。ここを増やすと検査は厚くなるが時間も伸びる */
 const TARGETS = [
@@ -88,6 +88,41 @@ async function main() {
   const password = process.env.BASIC_AUTH_PASSWORD;
 
   const browser = await chromium.launch();
+  // 🔴 .finally(() => browser.close()) は使わない。
+  //    Promise.prototype.finally は、渡した処理自体が失敗すると、
+  //    元の結果が成功していてもその失敗で上書きしてしまう。
+  //    撮影がすべて成功したのに閉じる操作だけが失敗した場合、
+  //    せっかく撮れた結果を検査ではなく実行時エラーとして捨てることになる。
+  //    try/finally なら、閉じる操作の失敗は無視して結果を残せる。
+  let results;
+  try {
+    results = await captureAll(browser, { preview, baseline, out, user, password });
+  } finally {
+    // 開いたままだと node が終われず、ジョブは失敗せずに制限時間まで回り続ける
+    // （20分の空回り）。閉じるのに失敗しても、それ自体で検査結果を潰さない。
+    await browser.close().catch(() => {});
+  }
+
+  // 判定は1回だけ出し、依頼への文面と機械が読む出力の両方で同じものを使う。
+  // 2回計算すると、片方だけ条件が変わったときに両者が食い違う。
+  const verdict = judge(results, targetPath, checks);
+
+  const summary = buildSummary(results, preview, targetPath, checks, verdict);
+  await writeFile(path.join(out, "summary.md"), summary, "utf-8");
+  console.log(summary);
+
+  // 「自動で取り込んでよいか」を、後続の処理が読める形で残す。
+  // ここでは取り込みそのものは行わない。判定を出すだけに留めている。
+  await writeFile(path.join(out, "verdict.json"), JSON.stringify(verdict, null, 2), "utf-8");
+  await writeMergeable(verdict.ok);
+
+  // process.exit だと、直前の console.log がパイプへ書き終わる前に切れることがある。
+  // 実行の記録は赤くなったときに最初に読まれるので、途中で切れさせない。
+  process.exitCode = shouldFail(results) ? 1 : 0;
+}
+
+/** 見る場所をすべて撮って比べる */
+async function captureAll(browser, { preview, baseline, out, user, password }) {
   // 比較元も develop のプレビューなので、どちらにも合言葉が要る
   const credentials =
     user && password ? { httpCredentials: { username: user, password } } : {};
@@ -120,22 +155,36 @@ async function main() {
       await writeFile(path.join(out, `${name}-after.png`), after.buffer);
       await writeFile(path.join(out, `${name}-diff.png`), diff.diffImage);
 
-      results.push({ target, diff, consoleErrors: after.consoleErrors });
+      results.push({
+        target,
+        diff,
+        consoleErrors: after.consoleErrors,
+        // 比較元のエラーも持っておく。元から出ているものまで数えると、
+        // 外部の計測タグ1つで以後すべての依頼が止まってしまう。
+        baselineConsoleErrors: before.consoleErrors,
+      });
     } catch (error) {
       results.push({ target, error: String(error).slice(0, 300) });
     }
   }
-
-  await browser.close();
-
-  const summary = buildSummary(results, preview, targetPath, checks);
-  await writeFile(path.join(out, "summary.md"), summary, "utf-8");
-  console.log(summary);
-
-  process.exit(shouldFail(results) ? 1 : 0);
+  return results;
 }
+
+/** 判定を、後続の処理が読める形で書き出す */
+async function writeMergeable(ok) {
+  if (!process.env.GITHUB_OUTPUT) return;
+  await appendFile(process.env.GITHUB_OUTPUT, `mergeable=${ok ? "true" : "false"}\n`, "utf-8");
+}
+
+/**
+ * 🔴 まず「取り込めない」と書いてから始める。
+ *    途中で落ちた場合に何も書かれていないと、受け取る側からは
+ *    「判定が無い」と「取り込んでよい」の区別がつかない。
+ *    安全網が壊れたときは、通さない側に倒れる必要がある。
+ */
+await writeMergeable(false);
 
 main().catch((error) => {
   console.error("検査そのものが失敗しました:", error);
-  process.exit(2);
+  process.exitCode = 2;
 });
