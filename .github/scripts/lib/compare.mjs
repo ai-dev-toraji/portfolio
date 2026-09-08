@@ -36,6 +36,11 @@ export function compare(beforeBuffer, afterBuffer) {
     heightChanged,
     beforeHeight: before.height,
     afterHeight: after.height,
+    // 横幅も同じ理由で返す。重なる範囲だけを比べる以上、はみ出した部分は
+    // 画素の差として現れないため、寸法の変化そのものを別に伝える必要がある。
+    widthChanged: before.width !== after.width,
+    beforeWidth: before.width,
+    afterWidth: after.width,
     diffImage: PNG.sync.write(diff),
   };
 }

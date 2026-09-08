@@ -58,6 +58,22 @@ test("高さが変わったことを検知し、重なる範囲だけで比べ�
   assert.equal(result.changedPixels, 0);
 });
 
+test("横幅が変わったことも検知する", () => {
+  // 横に広がった場合も、重なる範囲だけを比べると差分は 0 になる。
+  // 判定側はこの値を見て「動いた」と判断するので、必ず返す必要がある。
+  const result = compare(solid(20, 10, [255, 255, 255]), solid(60, 10, [255, 255, 255]));
+  assert.equal(result.widthChanged, true);
+  assert.equal(result.beforeWidth, 20);
+  assert.equal(result.afterWidth, 60);
+  assert.equal(result.changedPixels, 0);
+});
+
+test("寸法が変わっていなければ、変わっていないと返す", () => {
+  const result = compare(solid(20, 10, [255, 255, 255]), solid(20, 10, [0, 0, 0]));
+  assert.equal(result.widthChanged, false);
+  assert.equal(result.heightChanged, false);
+});
+
 test("差分画像が PNG として書き出せる", () => {
   const result = compare(solid(8, 8, [255, 255, 255]), halfPainted(8, 8, [255, 255, 255], [255, 0, 0]));
   const decoded = PNG.sync.read(result.diffImage);
