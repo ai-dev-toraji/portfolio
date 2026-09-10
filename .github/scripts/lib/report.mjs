@@ -30,6 +30,18 @@ export const SPILL_TOLERANCE_PERCENT = 0.05;
  */
 export const SPILL_DIMENSION_TOLERANCE_PX = 2;
 
+/**
+ * AI の1回の作業がこの金額（米ドル）を超えたら、見た目の判定に関わらず人へ回す。
+ *
+ * S6（実戦10件・2026-09-09）の実測が根拠。素直に直った7件は $0.109〜0.136 に
+ * 収まり、コードの作りを壊した2件は $0.181 と $0.205 だった（$0.209 の1件は
+ * 作りとしては正しかったが、判断に迷った跡が同じように出ている）。
+ * 金額と作業時間は「AI が迷ったか」の代理であり、見た目の比較が原理的に
+ * 持てない情報なので、独立した手がかりとして使う。
+ * ⚠️ 10件の実測から置いた暫定値。回数を重ねてから調整すること。
+ */
+export const COST_ATTENTION_USD = 0.15;
+
 /** 数字を3桁ごとに区切る。言語を明示するので実行環境の設定に左右されない */
 function withCommas(value) {
   return value.toLocaleString("en-US");
@@ -149,6 +161,32 @@ export function judge(results, targetPath, checks = {}) {
     }
   }
 
+  // 見た目の比較が持てない手がかり（S6 の実測から）。
+  //
+  // 見た目が依頼どおりでも、共通の部品を使うのをやめて中身を写し取れば
+  // 写真上は正しく見える。実際にそれが判定を通り抜けたため、別の筋から拾う。
+  // 🔴 Number.isFinite で受ける。typeof で見ると NaN が「数字」として通り、
+  //    NaN > 閾値 は常に偽なので、値が壊れているのに合格側へ倒れる。
+  //    しかも診断には null が入り、コメントと機械が読む記録が食い違う。
+  const costUsd = Number.isFinite(checks.costUsd) ? checks.costUsd : null;
+  if (costUsd !== null && costUsd > COST_ATTENTION_USD) {
+    reasons.push(
+      `AI の作業量が普段より大きくなっています（$${costUsd.toFixed(3)}／目安 $${COST_ATTENTION_USD}）。` +
+        "迷いながら直した可能性があるため、書き方も含めて人が確かめてください",
+    );
+  }
+
+  const removedImports = Array.isArray(checks.removedImports) ? checks.removedImports : null;
+  if (removedImports !== null && removedImports.length > 0) {
+    reasons.push(
+      `共通の部品の読み込みが ${removedImports.length} 件消えています（` +
+        // パスはそのまま地の文に置かない。`|` は表を壊し、バックティックは
+        // 囲みを閉じる。forCell と同じ考え方で、表示を崩さない形にする。
+        `${removedImports.map((p) => `\`${String(p).replace(/`/g, "'")}\``).join("、")}）。` +
+        "部品を使うのをやめて中身を写し取った可能性があります。見た目だけでは分からないため人が確かめてください",
+    );
+  }
+
   let targetChangedPixels = null;
   if (targetPath === undefined) {
     reasons.push(
@@ -227,6 +265,10 @@ export function judge(results, targetPath, checks = {}) {
       targetChangedPixels,
       spilledCount: spilled.length,
       checkedCount: measured.length,
+      // 渡されなかった場合は null。0 と区別できないと「費用ゼロで済んだ」と
+      // 「そもそも測っていない」を読み違える。
+      costUsd,
+      removedImports,
     },
   };
 }
@@ -356,6 +398,23 @@ export function buildSummary(
       "※ 検査したのは上の表にある場所だけです。表に無いページについては判定していません。" +
         "また、ごくわずかな画素差はデプロイごとの揺らぎとして許容しています。",
     );
+
+    // 🔴 見た目の比較は「見た目が正しいか」しか見ない。共通の部品を使うのを
+    //    やめて中身を写し取るような直し方は、写真の上では正しく見えるため
+    //    ここを通り抜ける（S6 で実際に通り抜けた）。その手がかりを確かめられ
+    //    なかったときは、確かめていないと書く。黙って通すと、依頼者は
+    //    「機械が全部見てくれた」と読む。
+    const unchecked = [];
+    if (verdict.diagnostics.costUsd === null) unchecked.push("AI の作業量");
+    if (verdict.diagnostics.removedImports === null) unchecked.push("共通の部品の切り離し");
+    if (unchecked.length > 0) {
+      lines.push(
+        "",
+        `※ ${unchecked.join("と")}については確かめていません。` +
+          "見た目が正しくても書き方でサイトの作りが崩れている場合があり、" +
+          "それはこの検査では分かりません。",
+      );
+    }
   } else {
     lines.push(
       "⚠️ **自動では取り込めません。** 次の点があるため、人の目での確認が要ります。",

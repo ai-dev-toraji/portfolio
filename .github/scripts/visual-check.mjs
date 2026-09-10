@@ -20,6 +20,7 @@
 
 import { appendFile, mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 
 import { chromium } from "playwright";
 
@@ -35,11 +36,10 @@ const TARGETS = [
   { path: "/service", width: 1280, height: 800, label: "サービス" },
 ];
 
-function parseArgs() {
-  const args = process.argv.slice(2);
+export function parseArgs(argv = process.argv.slice(2)) {
   const get = (name) => {
-    const i = args.indexOf(`--${name}`);
-    return i >= 0 ? args[i + 1] : undefined;
+    const i = argv.indexOf(`--${name}`);
+    return i >= 0 ? argv[i + 1] : undefined;
   };
   const preview = get("preview");
   const baseline = get("baseline");
@@ -57,8 +57,37 @@ function parseArgs() {
     checks: {
       build: get("build-status"),
       lint: get("lint-status"),
+      // 見た目の比較では原理的に捕まえられない手がかり（S6 の実測より）。
+      // 数字にならなかった場合は undefined のままにし、judge 側で
+      // 「確かめていない」として扱えるようにする（0 と混同させない）。
+      // 🔴 Number("") は 0 になる。空文字を「調べたら安かった」と読ませない。
+      costUsd: parseCostUsd(get("cost-usd")),
+      removedImports: parseRemovedImports(get("removed-imports")),
     },
   };
+}
+
+/**
+ * AI の作業量（米ドル）。
+ * 数字として読めないものはすべて「確かめていない」に倒す。
+ * 空文字を 0 と読むと「ただ同然で済んだ」ことになり、判定の柱が黙って1本抜ける。
+ */
+export function parseCostUsd(raw) {
+  if (raw === undefined || raw.trim() === "") return undefined;
+  const value = Number(raw);
+  return Number.isFinite(value) ? value : undefined;
+}
+
+/**
+ * 消えた読み込み（import）の一覧。改行区切りで受け取る。
+ * 渡されなかった場合は undefined を返し、「調べたが1件も無かった」と区別する。
+ */
+export function parseRemovedImports(raw) {
+  if (raw === undefined) return undefined;
+  return raw
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
 }
 
 /** 1ページ分を撮る。コンソールのエラーも拾う */
@@ -176,15 +205,20 @@ async function writeMergeable(ok) {
   await appendFile(process.env.GITHUB_OUTPUT, `mergeable=${ok ? "true" : "false"}\n`, "utf-8");
 }
 
-/**
- * 🔴 まず「取り込めない」と書いてから始める。
- *    途中で落ちた場合に何も書かれていないと、受け取る側からは
- *    「判定が無い」と「取り込んでよい」の区別がつかない。
- *    安全網が壊れたときは、通さない側に倒れる必要がある。
- */
-await writeMergeable(false);
+// このファイルを直接実行したときだけ検査を始める。
+// テストから読み込んだだけで走り出すと、引数が無いので必ず失敗し、
+// 本物の検査が壊れているのかテストの都合なのか区別できなくなる。
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  /**
+   * 🔴 まず「取り込めない」と書いてから始める。
+   *    途中で落ちた場合に何も書かれていないと、受け取る側からは
+   *    「判定が無い」と「取り込んでよい」の区別がつかない。
+   *    安全網が壊れたときは、通さない側に倒れる必要がある。
+   */
+  await writeMergeable(false);
 
-main().catch((error) => {
-  console.error("検査そのものが失敗しました:", error);
-  process.exitCode = 2;
-});
+  main().catch((error) => {
+    console.error("検査そのものが失敗しました:", error);
+    process.exitCode = 2;
+  });
+}

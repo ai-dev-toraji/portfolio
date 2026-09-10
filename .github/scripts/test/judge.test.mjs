@@ -8,7 +8,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { judge } from "../lib/report.mjs";
+import { COST_ATTENTION_USD, judge } from "../lib/report.mjs";
 
 /**
  * 機械のチェックは「通った」を既定にする。
@@ -329,4 +329,97 @@ test("依頼のページが検査対象に無い場合と、測れなかった�
   assert.match(notCovered.reasons.join("\n"), /検査の対象に入っていない/);
   assert.doesNotMatch(failed.reasons.join("\n"), /検査の対象に入っていない/);
   assert.match(failed.reasons.join("\n"), /確認できませんでした/);
+});
+
+/**
+ * ここから下は S6（実戦10件・2026-09-09）の実測から足した判定。
+ *
+ * 見た目の比較は「見た目が正しいか」しか見ない。実際に、見た目は依頼どおりなのに
+ * 共通の部品を使うのをやめて中身を写し取った修正が、この判定を通り抜けた。
+ * 写真の比べ合いでは原理的に捕まえられないので、別の手がかりで拾う。
+ */
+
+test("AI の作業量が普段より大きければ、取り込まずに人へ回す", () => {
+  // S6 実測: 素直に直った7件は $0.109〜0.136、作りを壊した2件は $0.18 と $0.21。
+  const verdict = judgeWith([seen("/about", "私たちについて", 40), seen("/", "トップ", 0)], "/about", {
+    ...OK_CHECKS,
+    costUsd: 0.21,
+  });
+  assert.equal(verdict.ok, false);
+  assert.match(verdict.reasons.join("\n"), /作業量/);
+});
+
+test("AI の作業量が普段どおりなら、判定を妨げない", () => {
+  const verdict = judgeWith([seen("/about", "私たちについて", 40), seen("/", "トップ", 0)], "/about", {
+    ...OK_CHECKS,
+    costUsd: 0.12,
+  });
+  assert.equal(verdict.ok, true);
+});
+
+test("作業量が渡されなかったことと、費用がゼロだったことを区別する", () => {
+  // 「渡し忘れ」を「普段どおりだった」と読むと、判定の柱が黙って1本抜ける。
+  const notPassed = judgeWith([seen("/about", "私たちについて", 40), seen("/", "トップ", 0)], "/about");
+  assert.equal(notPassed.diagnostics.costUsd, null);
+
+  const zero = judgeWith([seen("/about", "私たちについて", 40), seen("/", "トップ", 0)], "/about", {
+    ...OK_CHECKS,
+    costUsd: 0,
+  });
+  assert.equal(zero.diagnostics.costUsd, 0);
+});
+
+test("消えた読み込みを調べなかったことと、0件だったことを区別する", () => {
+  const notPassed = judgeWith([seen("/about", "私たちについて", 40), seen("/", "トップ", 0)], "/about");
+  assert.equal(notPassed.diagnostics.removedImports, null);
+
+  const none = judgeWith([seen("/about", "私たちについて", 40), seen("/", "トップ", 0)], "/about", {
+    ...OK_CHECKS,
+    removedImports: [],
+  });
+  assert.deepEqual(none.diagnostics.removedImports, []);
+});
+
+test("共通の部品を切り離した疑い（import の削除）があれば、取り込まずに人へ回す", () => {
+  const verdict = judgeWith([seen("/about", "私たちについて", 40), seen("/", "トップ", 0)], "/about", {
+    ...OK_CHECKS,
+    removedImports: ["@/components/ui/section-title"],
+  });
+  assert.equal(verdict.ok, false);
+  assert.match(verdict.reasons.join("\n"), /部品/);
+  assert.match(verdict.reasons.join("\n"), /section-title/);
+});
+
+test("import の削除が無ければ、判定を妨げない", () => {
+  const verdict = judgeWith([seen("/about", "私たちについて", 40), seen("/", "トップ", 0)], "/about", {
+    ...OK_CHECKS,
+    removedImports: [],
+  });
+  assert.equal(verdict.ok, true);
+});
+
+test("作業量が数字にならなかったときは、安かったことにしない", () => {
+  // Number("") は 0、Number("abc") は NaN。どちらも「安く済んだ」と読ませない。
+  // NaN > 閾値 は常に偽なので、素通しの経路になりやすい。
+  const verdict = judgeWith([seen("/about", "私たちについて", 40), seen("/", "トップ", 0)], "/about", {
+    ...OK_CHECKS,
+    costUsd: Number.NaN,
+  });
+  assert.equal(verdict.diagnostics.costUsd, null, "確かめていない扱いにする");
+});
+
+test("作業量が閾値ちょうどなら止めない（境界）", () => {
+  const verdict = judgeWith([seen("/about", "私たちについて", 40), seen("/", "トップ", 0)], "/about", {
+    ...OK_CHECKS,
+    costUsd: COST_ATTENTION_USD,
+  });
+  assert.equal(verdict.ok, true);
+});
+
+test("作業量が閾値をわずかでも超えたら止める（境界）", () => {
+  const verdict = judgeWith([seen("/about", "私たちについて", 40), seen("/", "トップ", 0)], "/about", {
+    ...OK_CHECKS,
+    costUsd: COST_ATTENTION_USD + 0.001,
+  });
+  assert.equal(verdict.ok, false);
 });
