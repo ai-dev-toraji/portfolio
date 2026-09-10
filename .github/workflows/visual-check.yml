@@ -29,6 +29,10 @@ on:
         description: "結果を書き込む依頼の番号"
         required: true
         type: string
+      cost_usd:
+        description: "AI の今回の作業量（米ドル）。取り出せなかった場合は空のまま"
+        required: false
+        type: string
     # 🔴 呼び出し元が自動で取り込んでよいかを判断するための唯一の値。
     #    ここを宣言しないと、ジョブ側で outputs を書いても呼び出し元には届かない。
     outputs:
@@ -78,6 +82,74 @@ jobs:
       - name: 検査するブランチの先頭を控える
         id: head
         run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      # 共通の部品を切り離していないかを見る。
+      #
+      # S6（実戦10件）で、5か所から使われている見出し部品をやめて中身を写し取り
+      # 色を直接書き込んだ修正が、見た目の判定を通り抜けた。見た目は依頼どおり
+      # なので写真の比べ合いでは原理的に捕まえられない。消えた読み込み（import）は
+      # その切り離しの手がかりになるため、差分から拾って判定へ渡す。
+      # 🔴 調べられなかったことを「0件だった」と報告しない。
+      #    この手順が静かに空を返すと、判定は「調べたが切り離しは無かった」と
+      #    読み、まとめにも断り書きが出ない。安全網が1本抜けたまま
+      #    「問題なし」の顔をした報告が出る、いちばん危ない壊れ方になる。
+      #    そのため成否を checked として明示し、失敗時は判定へ何も渡さない。
+      - name: 消えた部品の読み込みを拾う
+        id: imports
+        continue-on-error: true
+        run: |
+          set -uo pipefail
+          echo "checked=false" >> "$GITHUB_OUTPUT"
+
+          # 比較には共通の祖先が要る。checkout は浅いので、develop を
+          # 取り直したうえで両側の履歴を祖先が見つかるまで深くする。
+          # --depth だけでは refs/remotes/origin/develop が作られないことがあるため、
+          # 行き先の ref を明示する。
+          git fetch --no-tags --depth 50 origin +refs/heads/develop:refs/remotes/origin/develop
+          for _ in 1 2 3; do
+            git merge-base origin/develop HEAD >/dev/null 2>&1 && break
+            git fetch --no-tags --deepen 100 origin +refs/heads/develop:refs/remotes/origin/develop
+            git fetch --no-tags --deepen 100 origin "+HEAD:refs/remotes/origin/checked-head" || true
+          done
+          if ! git merge-base origin/develop HEAD >/dev/null 2>&1; then
+            echo "共通の祖先が見つからないため、部品の切り離しは調べられない"
+            exit 1
+          fi
+
+          # 削除された読み込みのうち、プロジェクト内の部品（@/ 始まり）だけを見る。
+          # 外部パッケージの整理は切り離しの話ではないため対象外。
+          #
+          # 実物の書き方に合わせる:
+          #   - import が複数行にまたがる（`} from "@/..."` だけの行になる）
+          #   - 引用符が " と ' の両方ある
+          #   - 拡張子は tsx/ts のほかに js/jsx/mjs もありうる
+          DIFF=$(git diff "$(git merge-base origin/develop HEAD)" HEAD -- \
+            '*.tsx' '*.ts' '*.jsx' '*.js' '*.mjs')
+          extract() {
+            printf '%s\n' "$DIFF" \
+              | grep -E "^\\$1.*from ['\"]@/" \
+              | grep -oE "['\"]@/[^'\"]+['\"]" \
+              | tr -d "'\"" \
+              | sort -u
+          }
+          # 消えたものから、同じ差分で足し直されたものを引く。
+          # 読み込みの中身を書き換えただけ（1行消して1行足す）を
+          # 「切り離した」と報告すると、正しい修正まで止まる。
+          REMOVED=$(comm -23 <(extract -) <(extract +) || true)
+
+          {
+            echo "removed<<__FIXLANE_EOF__"
+            printf '%s\n' "$REMOVED"
+            echo "__FIXLANE_EOF__"
+          } >> "$GITHUB_OUTPUT"
+          echo "checked=true" >> "$GITHUB_OUTPUT"
+
+          if [ -n "$REMOVED" ]; then
+            echo "消えた部品の読み込み:"
+            printf '%s\n' "$REMOVED"
+          else
+            echo "消えた部品の読み込みは無し（調べた結果）"
+          fi
 
       - name: 依頼から対象ページを取り出す
         id: request
@@ -228,6 +300,15 @@ jobs:
           # 🔴 1行で書く。折りたたみ記法（>-）は、続きの行を深く字下げすると
           #    改行がそのまま残り、式が壊れる。
           LINT_STATUS: ${{ steps.lint.outcome == 'success' && 'ok' || steps.lint.outcome == 'failure' && 'failed' || 'unknown' }}
+          # 見た目の比較が原理的に持てない手がかり（S6 の実測より）。
+          # どちらも取れなかった場合は空のまま渡さず、判定側で「確かめていない」扱いにする。
+          COST_USD: ${{ inputs.cost_usd }}
+          REMOVED_IMPORTS: ${{ steps.imports.outputs.removed }}
+          # 🔴 「調べた結果0件」と「調べられなかった」を分ける唯一の値。
+          #    outcome ではなくこの値を見る。outcome は手順が失敗しても
+          #    continue-on-error の下では success 以外になる経路が読みにくく、
+          #    区別の根拠にすると静かに崩れる。
+          IMPORTS_CHECKED: ${{ steps.imports.outputs.checked }}
         run: |
           set -uo pipefail
           ARGS=(
@@ -239,6 +320,15 @@ jobs:
           )
           if [ -n "$TARGET_PATH" ]; then
             ARGS+=(--target-path "$TARGET_PATH")
+          fi
+          if [ -n "$COST_USD" ]; then
+            ARGS+=(--cost-usd "$COST_USD")
+          fi
+          # 消えた読み込みは「調べて0件だった」ことにも意味があるため、
+          # 調べられた場合は空文字でも渡す。渡さないこと自体が
+          # 「確かめていない」を意味し、まとめにその断り書きが出る。
+          if [ "$IMPORTS_CHECKED" = "true" ]; then
+            ARGS+=(--removed-imports "$REMOVED_IMPORTS")
           fi
           node .github/scripts/visual-check.mjs "${ARGS[@]}"
 

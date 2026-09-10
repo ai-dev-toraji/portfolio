@@ -205,3 +205,26 @@ test("取り込めない判定のときに、安心させる文を並べない",
   assert.doesNotMatch(md, /収まっていると判断できます/);
   assert.doesNotMatch(md, /見つかりませんでした/);
 });
+
+/**
+ * S6（実戦10件）で足した観点。見た目の比較では捕まえられない手がかりを
+ * 使う以上、その手がかりを確かめられなかったことも隠さずに書く。
+ * 「検査できていないことを問題なしと書かない」という S4 からの規則の延長。
+ */
+test("取り込めると書くとき、作業量を確かめていないならその旨も書く", () => {
+  const md = summaryOf([ok("/about", "私たちについて", 40), ok("/", "トップ", 0)], "/about");
+  assert.match(md, /自動で取り込める/);
+  assert.match(md, /作業量/);
+  assert.match(md, /確かめて|確認して/);
+});
+
+test("作業量を確かめたうえで問題なければ、余計な断り書きは出さない", () => {
+  const md = summaryOf([ok("/about", "私たちについて", 40), ok("/", "トップ", 0)], "/about", {
+    build: "ok",
+    lint: "ok",
+    costUsd: 0.12,
+    removedImports: [],
+  });
+  assert.match(md, /自動で取り込める/);
+  assert.doesNotMatch(md, /作業量は確かめていません/);
+});
