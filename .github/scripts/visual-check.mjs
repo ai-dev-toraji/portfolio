@@ -63,6 +63,7 @@ export function parseArgs(argv = process.argv.slice(2)) {
       // 🔴 Number("") は 0 になる。空文字を「調べたら安かった」と読ませない。
       costUsd: parseCostUsd(get("cost-usd")),
       removedImports: parseRemovedImports(get("removed-imports")),
+      leftoverFiles: parseRemovedImports(get("leftover-files")),
     },
   };
 }

@@ -176,6 +176,17 @@ export function judge(results, targetPath, checks = {}) {
     );
   }
 
+  // AI に渡すためにこちらで一時的に置いたファイル（差し替える画像・構造の資料）。
+  // 使い終わったら消すよう伝えてあるが、消し忘れるとサイトに紛れ込む。
+  // 見た目には出ないため、写真の比べ合いでは捕まらない。
+  const leftoverFiles = Array.isArray(checks.leftoverFiles) ? checks.leftoverFiles : null;
+  if (leftoverFiles !== null && leftoverFiles.length > 0) {
+    reasons.push(
+      `作業用に置いたファイルが残っています（${leftoverFiles.join("、")}）。` +
+        "これはサイトの一部ではないため、取り込む前に取り除いてください",
+    );
+  }
+
   const removedImports = Array.isArray(checks.removedImports) ? checks.removedImports : null;
   if (removedImports !== null && removedImports.length > 0) {
     reasons.push(
