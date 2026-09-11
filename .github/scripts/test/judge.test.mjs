@@ -423,3 +423,30 @@ test("作業量が閾値をわずかでも超えたら止める（境界）", ()
   });
   assert.equal(verdict.ok, false);
 });
+
+/**
+ * 作業用に置いたファイルの消し忘れ。
+ *
+ * AI に渡すために、こちらで一時的に置くファイルがある（差し替える画像、
+ * このサイトの構造をまとめた資料）。AI には「使い終わったら消せ」と伝えるが、
+ * 消し忘れるとサイトに紛れ込む。
+ *
+ * 見た目には出ないため、写真の比べ合いでは捕まらない。
+ */
+test("作業用に置いたファイルが残っていれば、取り込まない", () => {
+  const verdict = judgeWith([seen("/about", "私たちについて", 40), seen("/", "トップ", 0)], "/about", {
+    ...OK_CHECKS,
+    leftoverFiles: ["fixlane-structure.md"],
+  });
+  assert.equal(verdict.ok, false);
+  assert.match(verdict.reasons.join("\n"), /作業用/);
+  assert.match(verdict.reasons.join("\n"), /fixlane-structure\.md/);
+});
+
+test("作業用のファイルが残っていなければ、判定を妨げない", () => {
+  const verdict = judgeWith([seen("/about", "私たちについて", 40), seen("/", "トップ", 0)], "/about", {
+    ...OK_CHECKS,
+    leftoverFiles: [],
+  });
+  assert.equal(verdict.ok, true);
+});
