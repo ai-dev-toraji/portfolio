@@ -18,7 +18,7 @@ const services = [
     imageSrc: "/service/service_03.png",
     title: "フロントエンド開発",
     description:
-      "React ,Next.jsを用いたフロントエンド開発が可能です。（2年以上の経験）\nPythonを使用したことがあるので、バックエンドを考慮した開発を行えます。\n最近は、WordPressからNext.js + miroCMSを用いたJamStak化の実装を1人で担当致しました。",
+      "React ,Next.jsを用いたフロントエンド開発が可能です。（2年以上の経験）\nPythonを使用したことがあるので、バックエンドを考慮した開発を行えます。\n最近は、WordPressからNext.js + microCMSを用いたJamstack化の実装を1人で担当致しました。",
   },
 ];
 
