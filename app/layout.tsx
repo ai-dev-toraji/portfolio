@@ -31,6 +31,13 @@ export default function RootLayout({
     <html lang="ja">
       <body className={`${notoSerifJP.variable} antialiased`}>
         {children}
+        {/* 確認用環境だけ FixLane（修正依頼の入口）を読み込む。本番には出さない */}
+        {process.env.VERCEL_ENV === "preview" && (
+          <script
+            defer
+            src="https://fixlane-moritorajis-projects.vercel.app/widget.v1.js"
+          />
+        )}
       </body>
       <GoogleAnalytics gaId="G-SCR8CXXQVR" />
       <SpeedInsights />
