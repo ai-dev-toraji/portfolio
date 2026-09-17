@@ -24,6 +24,7 @@ const profileGroups: ProfileGroup[] = [
     title: "経歴",
     children: (
       <>
+        <p>フリーランスエンジニア歴は6年目になります。</p>
         <p>（2021年8月~現在）</p>
         <p>Web制作フリーランスとして、コーディング、WordPress構築をメインに活動中。</p>
         <p>（2023年2月~9月）</p>
