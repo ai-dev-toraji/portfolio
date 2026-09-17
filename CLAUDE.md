@@ -51,3 +51,14 @@ npm run lint    # ESLint
 
 `main` には直接コミットしない。`develop` を基点にブランチを切り、`develop` 宛ての
 Pull Request を経由する。
+
+## リポジトリ横断作業（FixLane との連携）
+
+FixLane（修正依頼の仕組み）とこのリポジトリの両方に変更が要る作業の手順は、
+**FixLane のリポジトリ（Private）の `claudedocs/CROSS_REPO_WORKFLOW.md` が正典**。ここには書き写さない。
+
+- 実施順は FixLane → このリポジトリ。FixLane の新しい版が本番で配られていることを確かめてから変える
+- このリポジトリで FixLane との取り決めに関わる場所: `app/layout.tsx` のウィジェットの読み込み行（版の番号）、
+  `.fixlane/work-rules.md`、`.github/workflows/`（`fix-request.yml` / `visual-check.yml`）、`proxy.ts`（確認用環境の Basic 認証）
+- このリポジトリは公開されている。Issue や Pull Request に FixLane の内部（計画・監査の指摘・設定の値）を書かない
+- 自動の修正依頼の作業では、上の場所は触らない（`.fixlane/work-rules.md` に従う）
