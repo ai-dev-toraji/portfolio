@@ -30,7 +30,7 @@ const profileGroups: ProfileGroup[] = [
         <p>（2023年2月~9月）</p>
         <p>Webアプリ開発に携わる。バックエンドからフロントエンド開発まで一貫して開発に携わりました。</p>
         <p>（2024年9月~現在）</p>
-        <p>フロンエンド開発（React.js、Next.js）に携わる。</p>
+        <p>フロントエンド開発（React.js、Next.js）に携わる。</p>
       </>
     ),
   },
