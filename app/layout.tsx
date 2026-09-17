@@ -35,7 +35,7 @@ export default function RootLayout({
         {process.env.VERCEL_ENV === "preview" && (
           <script
             defer
-            src="https://fixlane-moritorajis-projects.vercel.app/widget.v1.js"
+            src="https://fixlane-moritorajis-projects.vercel.app/widget.v2.js"
           />
         )}
       </body>
